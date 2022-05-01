@@ -52,6 +52,7 @@ module Board : sig
   val get : t -> point -> int option
   val set : t -> point -> int option -> unit
   val draw : t -> unit
+
 end = struct
   type t = int option array array
 
