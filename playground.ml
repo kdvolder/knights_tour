@@ -28,4 +28,4 @@ let rec play game_state =
     GameState.do_move game_state (choose_move moves);
     play game_state
 
-let () = play (GameState.make ()) 
+let () = play (GameState.make 8) 

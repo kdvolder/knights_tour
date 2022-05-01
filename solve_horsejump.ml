@@ -1,6 +1,5 @@
 open Lib
 open Horsejump
-open GameState
 
 let report_solution = function
   | None ->  print_endline "==== NO SOLUTIONS ===="
@@ -26,26 +25,10 @@ let report_backtracking =
         Board.draw board
       )
 
-let rec solve state =
-  if isWinning state then
-    Some (GameState.board state)
-  else
-    match GameState.valid_moves state with
-    | [] ->
-        report_backtracking state;
-        None
-    | moves ->
-        List.to_seq moves
-        |> Seq.find_map (fun move -> try_move state move)
-and try_move state move = 
-  GameState.do_move state move;
-  match solve state with
-  | None -> GameState.undo_move state move; None
-  | Some solution -> Some solution
-
 let () =
-    Graphics.open_graph (Printf.sprintf " %dx%d" (Board.size * 32) (Board.size * 32));
-    solve (GameState.make ()) |> report_solution;
+    let board_size = 8 in
+    Graphics.open_graph (Printf.sprintf " %dx%d" (board_size * 32) (board_size * 32));
+    Horsejump.solve ~report_backtracking (GameState.make board_size) |> report_solution;
     print_endline "Press any key to EXIT";
     let _ = read_line () in
     print_endline "Goodbye!"
