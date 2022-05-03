@@ -190,7 +190,7 @@ end = struct
   
 end
 
-let solve ~report_backtracking = (
+let solve ?(report_backtracking = fun _ -> ()) = (
   let rec solve state =
     if GameState.isWinning state then
       Some (GameState.board state)
@@ -210,5 +210,41 @@ let solve ~report_backtracking = (
   in solve
 )
 
-let%test "8x8 board can be solved" = solve  ~report_backtracking:(fun _ -> ()) (GameState.make 8) 
-  |> Option.get |> fun x -> not (Board.isValid x) 
+let print_solve size = solve (GameState.make size)
+  |> Option.get |> Board.to_string |> print_endline
+
+let%test "5x5 board can be solved" = solve (GameState.make 8) 
+  |> Option.get |> fun x -> Board.isValid x 
+
+let%expect_test "print_solve 8" = print_solve 8;[%expect{|
+      A   B   C   D   E   F   G   H
+    +---+---+---+---+---+---+---+---+
+  0 | 1 |16 | 7 |34 |55 |32 |47 |36 |
+    +---+---+---+---+---+---+---+---+
+  1 | 8 |23 |14 |25 |46 |35 |56 |31 |
+    +---+---+---+---+---+---+---+---+
+  2 |15 | 2 |17 | 6 |33 |54 |37 |48 |
+    +---+---+---+---+---+---+---+---+
+  3 |22 | 9 |24 |13 |26 |45 |30 |57 |
+    +---+---+---+---+---+---+---+---+
+  4 | 3 |18 | 5 |44 |53 |40 |49 |38 |
+    +---+---+---+---+---+---+---+---+
+  5 |10 |21 |12 |27 |62 |29 |58 |41 |
+    +---+---+---+---+---+---+---+---+
+  6 |19 | 4 |63 |52 |43 |60 |39 |50 |
+    +---+---+---+---+---+---+---+---+
+  7 |64 |11 |20 |61 |28 |51 |42 |59 |
+    +---+---+---+---+---+---+---+---+ |}]
+let%expect_test "print_solve 5" = print_solve 5;[%expect{|
+      A   B   C   D   E
+    +---+---+---+---+---+
+  0 | 1 |10 |19 |14 |23 |
+    +---+---+---+---+---+
+  1 |18 | 5 |22 | 9 |20 |
+    +---+---+---+---+---+
+  2 |11 | 2 |13 |24 |15 |
+    +---+---+---+---+---+
+  3 | 6 |17 | 4 |21 | 8 |
+    +---+---+---+---+---+
+  4 | 3 |12 | 7 |16 |25 |
+    +---+---+---+---+---+ |}]
