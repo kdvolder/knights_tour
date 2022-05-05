@@ -5,6 +5,21 @@ type move = {
   dest: point;
 }
 
+let ( ** ) (xs:'a list) (ys:'b list) =
+  xs |> List.map (fun x ->
+    ys |> List.map (fun y ->
+      {x;y}
+    )
+  )
+  |> List.flatten
+
+let move_deltas = 
+  let deltas = [-1; 1; -2; 2] in
+    deltas ** deltas 
+  |> List.filter (fun {x;y} -> Int.abs x <> Int.abs y)
+
+let (+.) p d = { x=p.x + d.x; y=p.y + d.y}
+
 let moveIsValid {from; dest} =
   let dx = Int.abs (from.x - dest.x) in
   let dy = Int.abs (from.y - dest.y) in
@@ -26,7 +41,6 @@ let list_to_string to_string sep = function
 
 let move_to_string {from=_; dest} =  (colCode dest.x) ^ (rowCode dest.y)
 let moves_to_string = list_to_string move_to_string ", "
-
 
 let grid_to_string w h (cell_to_string : int -> int -> string) =
   let row_seperator = "  " ^(repeat w "+---") ^ "+\n" in
@@ -58,18 +72,36 @@ module Board : sig
   val set : t -> point -> int option -> unit
   val draw : t -> unit
   val isValid : t -> bool
+  val isValidTarget : t -> point -> bool
+  val count_targets : t -> point -> int
 
 end = struct
-  type t = int option array array
 
-  let size board = Array.length board
+  type cell = int option
 
-  let inRange board {x;y} = x>=0 && y>=0 && x<(size board) && y<(size board)
+  type t = cell array array
+
+  let size =Array.length
 
   let get board {x;y} = board.(x).(y)
 
-  let set board {x;y} v = board.(x).(y) <- v
+  let inRange board {x;y} = 
+    let sz = size board in x>=0 && y>=0 && x<sz && y<sz
 
+  let isValidTarget board pt = 
+    (inRange board pt) && Option.is_none (get board pt)
+
+  let count_targets board pt = 
+    move_deltas |> List.to_seq
+    |> Seq.map ((+.) pt)
+    |> Seq.filter (isValidTarget board)
+    |> Seq.length
+
+  let make size = Array.make_matrix size size None
+
+  let set board {x;y} v =  
+    board.(x).(y) <- v
+  
   let range lo hi = Seq.ints lo |> Seq.take_while (fun x -> x < hi) 
 
   let isValid (board:t) =
@@ -99,10 +131,8 @@ end = struct
   let to_string board = 
     let size = size board in
     grid_to_string size size (fun x y ->
-      cell_to_string (get board {x;y})
+      cell_to_string board.(x).(y)
   )
-
-  let make size = Array.make_matrix size size None
 
   let draw (board:t) = 
     (* let text_size = 20 in *)
@@ -118,22 +148,8 @@ end = struct
         Graphics.draw_string (cell_to_string cell)
       )
     )
+
 end
-
-let ( ** ) (xs:'a list) (ys:'b list) =
-  xs |> List.map (fun x ->
-    ys |> List.map (fun y ->
-      {x;y}
-    )
-  )
-  |> List.flatten
-
-let move_deltas = 
-  let deltas = [-1; 1; -2; 2] in
-    deltas ** deltas 
-  |> List.filter (fun {x;y} -> Int.abs x <> Int.abs y)
-
-let (+.) p d = { x=p.x + d.x; y=p.y + d.y}
 
 (* ************************* *)
 (* * GameState             * *)
@@ -187,7 +203,7 @@ end = struct
     |> List.map (fun d -> horse +. d)
     |> List.filter (isValidTarget board) 
     |> List.map (fun target -> {from=horse;dest=target})
-  
+
 end
 
 let solve ?(report_backtracking = fun _ -> ()) = (
@@ -209,6 +225,15 @@ let solve ?(report_backtracking = fun _ -> ()) = (
       | Some solution -> Some solution
   in solve
 )
+
+let print_targetcount board = 
+  let open Board in
+  let sz = size board in
+  print_endline (grid_to_string sz sz (fun x y ->
+    match get board {x;y} with
+    | None -> Printf.sprintf "%2d " (count_targets board {x;y})
+    | Some _  -> " # "
+  ))
 
 let print_solve size = solve (GameState.make size)
   |> Option.get |> Board.to_string |> print_endline
@@ -248,3 +273,18 @@ let%expect_test "print_solve 5" = print_solve 5;[%expect{|
     +---+---+---+---+---+
   4 | 3 |12 | 7 |16 |25 |
     +---+---+---+---+---+ |}]
+
+let%expect_test "print targetcount empty board" =
+  print_targetcount (Board.make 5); [%expect{|
+        A   B   C   D   E
+      +---+---+---+---+---+
+    0 | 2 | 3 | 4 | 3 | 2 |
+      +---+---+---+---+---+
+    1 | 3 | 4 | 6 | 4 | 3 |
+      +---+---+---+---+---+
+    2 | 4 | 6 | 8 | 6 | 4 |
+      +---+---+---+---+---+
+    3 | 3 | 4 | 6 | 4 | 3 |
+      +---+---+---+---+---+
+    4 | 2 | 3 | 4 | 3 | 2 |
+      +---+---+---+---+---+ |}]
