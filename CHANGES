@@ -1,0 +1,9 @@
+## v0.0.1 (2022-05-7)
+
+Initial release. A simple program that solves the 'knights-tour' puzzle.
+Includes a library for defining and exploring solving searchspaces.
+
+Compares two different implementations of the knights-tour solver.
+
+- one uses the searchpace library.
+- the other is a more direct implementation.
