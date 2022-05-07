@@ -1,5 +1,5 @@
 (executables
- (names playground solve_horsejump)
- (libraries stdio base core lib graphics)
+ (names playground solve_horsejump benchmark)
+ (libraries stdio base core lib graphics unix)
 ;   (preprocess (pps ppx_jane))
 )

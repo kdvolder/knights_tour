@@ -3,16 +3,16 @@
 type 'a t = 
   | Result of 'a
   | Fork of 'a t * 'a t 
-  | Lazy of 'a t lazy_t
+  | Lazy of (unit -> 'a t)
   | WithUndo of (unit -> 'a t) * (unit -> unit)
   | Empty
 
 let return x = Result x
 
 let rec bind a f = match a with
-  | Result a -> Lazy (lazy (f a))
-  | Fork (l,r) -> Lazy (lazy (Fork (bind l f, bind r f)))
-  | Lazy l -> Lazy (lazy (bind (Lazy.force l) f))
+  | Result a -> Lazy (fun () -> (f a))
+  | Fork (l,r) -> Fork (bind l f, bind r f)
+  | Lazy l -> Lazy (fun () ->  bind (l ()) f)
   | Empty -> Empty
   | WithUndo (action, undo) -> 
        let action = fun () -> bind (action ()) f in
@@ -40,7 +40,7 @@ let rec search = function
       | Some (left, leftRest) -> Some (left, Fork (leftRest, right)) 
       | None -> search right
   )
-  | Lazy l -> search (Lazy.force l)
+  | Lazy l -> l () |> search
   | WithUndo (action, undo) ->
       let space = action () in
       match search space with 
@@ -52,7 +52,7 @@ let defer l = Lazy l
 
 let empty = Empty
 
-let rec range from whle step = defer (lazy (
+let rec range from whle step = defer (fun () -> (
   if whle from then
     return from ++ (range (step from) whle step)
   else 
@@ -61,7 +61,7 @@ let rec range from whle step = defer (lazy (
 
 let int_range lo hi = range lo ((>=) hi) ((+) 1)
 
-let rec ints_from start = (return start) ++ defer (lazy (ints_from (1 + start)))
+let rec ints_from start = (return start) ++ defer (fun () -> (ints_from (1 + start)))
 let nats = ints_from 0
 
 let rec find_all space = match search space with

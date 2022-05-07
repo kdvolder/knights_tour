@@ -206,9 +206,15 @@ end = struct
 
 end
 
+(** Sort list of moves, putting more promising moves in front *)
+let sort_moves gs moves =
+  let board = GameState.board gs in moves
+  |> List.map (fun move -> (move, Board.count_targets board move.dest)) 
+  |> List.sort (fun (_, c1) (_,c2) -> c1-c2) 
+  |> List.map (fun (move, _) -> move) 
+
 let solve ?(report_backtracking = fun _ -> ()) = (
   let rec solve state =
-    let board = GameState.board state in
     if GameState.isWinning state then
       Some (GameState.board state)
     else
@@ -216,11 +222,9 @@ let solve ?(report_backtracking = fun _ -> ()) = (
       | [] ->
           report_backtracking state;
           None
-      | moves -> moves |>
-          List.map (fun move -> (move, Board.count_targets board move.dest))  |> 
-          List.sort (fun (_, c1) (_,c2) -> c1-c2) |> 
-          List.map (fun (move, _) -> move) |> 
-          List.find_map (try_move state)
+      | moves -> moves 
+          |> sort_moves state
+          |> List.find_map (try_move state)
     and try_move state move = 
       GameState.do_move state move;
       match solve state with
@@ -239,7 +243,8 @@ let make_search_space ?(report_backtracking = fun _ -> ()) board_size =
         report_backtracking state;
         Searchspace.empty
       ) 
-      | moves -> (moves       
+      | moves -> (moves 
+        |> sort_moves state   
         |> List.map (try_move state)
         |> Searchspace.alt  
       )
@@ -323,39 +328,39 @@ let%expect_test "horsejump via searchspace" =
     0:
         A   B   C   D   E
       +---+---+---+---+---+
-    0 | 1 |10 |19 |14 |23 |
+    0 | 1 |16 |11 |22 | 7 |
       +---+---+---+---+---+
-    1 |18 | 5 |22 | 9 |20 |
+    1 |10 |21 | 8 |17 |12 |
       +---+---+---+---+---+
-    2 |11 | 2 |13 |24 |15 |
+    2 |15 | 2 |23 | 6 |25 |
       +---+---+---+---+---+
-    3 | 6 |17 | 4 |21 | 8 |
+    3 |20 | 9 | 4 |13 |18 |
       +---+---+---+---+---+
-    4 | 3 |12 | 7 |16 |25 |
+    4 | 3 |14 |19 |24 | 5 |
       +---+---+---+---+---+
     1:
         A   B   C   D   E
       +---+---+---+---+---+
-    0 | 1 |10 |15 |20 |23 |
+    0 | 1 |16 |11 |22 | 7 |
       +---+---+---+---+---+
-    1 |16 | 5 |22 | 9 |14 |
+    1 |10 |21 | 8 |17 |12 |
       +---+---+---+---+---+
-    2 |11 | 2 |19 |24 |21 |
+    2 |15 | 2 |25 | 6 |23 |
       +---+---+---+---+---+
-    3 | 6 |17 | 4 |13 | 8 |
+    3 |20 | 9 | 4 |13 |18 |
       +---+---+---+---+---+
-    4 | 3 |12 | 7 |18 |25 |
+    4 | 3 |14 |19 |24 | 5 |
       +---+---+---+---+---+
     2:
         A   B   C   D   E
       +---+---+---+---+---+
-    0 | 1 |10 |15 |18 |23 |
+    0 | 1 |16 |11 |24 | 7 |
       +---+---+---+---+---+
-    1 |16 | 5 |22 | 9 |14 |
+    1 |10 |25 | 8 |17 |12 |
       +---+---+---+---+---+
-    2 |11 | 2 |17 |24 |19 |
+    2 |15 | 2 |21 | 6 |23 |
       +---+---+---+---+---+
-    3 | 6 |21 | 4 |13 | 8 |
+    3 |20 | 9 | 4 |13 |18 |
       +---+---+---+---+---+
-    4 | 3 |12 | 7 |20 |25 |
+    4 | 3 |14 |19 |22 | 5 |
       +---+---+---+---+---+ |}]
