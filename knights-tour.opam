@@ -11,6 +11,7 @@ bug-reports: "https://github.com/kdvolder/knights-tour/issues"
 depends: [
   "dune" {>= "3.1"}
   "graphics"
+  "stdio"
   "odoc" {with-doc}
 ]
 build: [
