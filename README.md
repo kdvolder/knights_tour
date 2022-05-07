@@ -15,6 +15,6 @@ To play the game yourself interactively:
 dune exec ./playground.exe
 ```
 
-##Opam install
+## Opam install
 
-When I figure out how to use opam / publish a module.
+TODO: Once we figured out how to publish a package on opam.
