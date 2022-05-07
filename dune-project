@@ -13,4 +13,6 @@
  (name knights-tour)
  (synopsis "Solves the Knight's tour puzzle")
  (description "See https://en.wikipedia.org/wiki/Knight%27s_tour")
- (depends "graphics" "stdio" "ppx_inline_test"))
+ (depends 
+  ("ocaml" (>= "4.14.0")) 
+  "graphics" "stdio" "ppx_inline_test"))

@@ -10,6 +10,7 @@ homepage: "https://github.com/kdvolder/knights-tour"
 bug-reports: "https://github.com/kdvolder/knights-tour/issues"
 depends: [
   "dune" {>= "3.1"}
+  "ocaml" {>= "4.14.0"}
   "graphics"
   "stdio"
   "ppx_inline_test"
