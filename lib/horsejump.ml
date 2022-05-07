@@ -208,6 +208,7 @@ end
 
 let solve ?(report_backtracking = fun _ -> ()) = (
   let rec solve state =
+    let board = GameState.board state in
     if GameState.isWinning state then
       Some (GameState.board state)
     else
@@ -215,9 +216,10 @@ let solve ?(report_backtracking = fun _ -> ()) = (
       | [] ->
           report_backtracking state;
           None
-      | moves ->
-          List.to_seq moves
-          |> Seq.find_map (fun move -> try_move state move)       
+      | moves -> List.map (fun move -> (move, Board.count_targets board move.dest)) moves
+          |> List.sort (fun (_, c1) (_,c2) -> c1-c2)
+          |> List.map (fun (move, _) -> move)
+          |> List.find_map (try_move state)
     and try_move state move = 
       GameState.do_move state move;
       match solve state with
@@ -225,6 +227,28 @@ let solve ?(report_backtracking = fun _ -> ()) = (
       | Some solution -> Some solution
   in solve
 )
+
+let make_search_space ?(report_backtracking = fun _ -> ()) board_size =
+  let rec search_space state =
+    if GameState.isWinning state then
+      Searchspace.return (GameState.board state)
+    else 
+      match GameState.valid_moves state with
+      | [] -> (
+        report_backtracking state;
+        Searchspace.empty
+      ) 
+      | moves -> (moves       
+        |> List.map (try_move state)
+        |> Searchspace.alt  
+      )
+  and try_move state move = 
+    Searchspace.withUndo (fun () -> 
+        GameState.do_move state move; 
+        search_space state
+      )
+      ~undo: (fun  () -> GameState.undo_move state move)
+  in search_space (GameState.make board_size)
 
 let print_targetcount board = 
   let open Board in
