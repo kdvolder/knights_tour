@@ -15,4 +15,4 @@
  (description "See https://en.wikipedia.org/wiki/Knight%27s_tour")
  (depends 
   ("ocaml" (>= "4.14.0")) 
-  "graphics" "stdio" "ppx_inline_test"))
+  "graphics" "stdio" "ppx_inline_test" "ppx_expect"))
