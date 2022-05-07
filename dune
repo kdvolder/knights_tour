@@ -1,7 +1,7 @@
 (executables
  (names        solve_horsejump playground     benchmark)
  (public_names solve_horsejump play_horsejump -)
- (libraries stdio lib graphics unix))
+ (libraries stdio graphics unix lib))
 ; (executables
 ;  (names playground benchmark)
 ;  (libraries stdio base core lib graphics unix)
