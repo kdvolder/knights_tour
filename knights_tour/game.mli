@@ -35,7 +35,7 @@ module Board :
         on the console.*)
     val to_string : t -> string
 
-    (** [Board.get b {x;y} reads the current contents of a square of the board at a 
+    (** [Board.get b {x;y}] reads the current contents of a square of the board at a 
         given [{x;y}] coordinate. *)
     val get : t -> point -> int option
 
