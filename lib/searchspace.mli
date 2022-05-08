@@ -1,3 +1,4 @@
+(** A searchspace with solutions of a given type.*)
 type 'a t
 
 (** A searchspace that contains a single solution *)
