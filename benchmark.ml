@@ -11,11 +11,11 @@ let print_runtime task =
 
 (* some sample tasks below *)
 
-let solve_recursive size () = let open Horsejump in 
+let solve_recursive size () = let open Game in 
   GameState.make size 
-  |> Horsejump.solve |> Option.get 
+  |> solve |> Option.get 
   |> (fun solution -> print_endline (Board.to_string solution))
-let solve_searchspace size () = let open Horsejump in 
+let solve_searchspace size () = let open Game in 
   make_search_space size 
   |> Searchspace.search |> Option.get 
   |> (fun (solution, _) -> print_endline (Board.to_string solution))

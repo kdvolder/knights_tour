@@ -1,5 +1,4 @@
-open Knights_tour
-open Horsejump
+open Knights_tour.Game
 open GameState
 
 let rec do_until prod =

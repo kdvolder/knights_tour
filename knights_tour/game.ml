@@ -40,6 +40,7 @@ let list_to_string to_string sep = function
   | x::xs -> List.fold_left (fun s el -> s ^ sep ^ (to_string el)) (to_string x) xs  
 
 let move_to_string {from=_; dest} =  (colCode dest.x) ^ (rowCode dest.y)
+
 let moves_to_string = list_to_string move_to_string ", "
 
 let grid_to_string w h (cell_to_string : int -> int -> string) =

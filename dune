@@ -1,5 +1,5 @@
 (executables
- (names        solve_horsejump playground     benchmark)
+ (names        solve        play   benchmark)
  (public_names knight_solve knight_play -)
  (libraries stdio graphics unix knights_tour))
 ; (executables

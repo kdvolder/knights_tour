@@ -1,5 +1,3 @@
-(* exception Bug of string *)
-
 type 'a t = 
   | Result of 'a
   | Fork of 'a t * 'a t 
