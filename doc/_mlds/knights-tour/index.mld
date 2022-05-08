@@ -1,0 +1,4 @@
+{0 knights-tour index}
+{1 Library knights-tour.lib}
+The entry point of this library is the module:
+{!module-Lib}.
