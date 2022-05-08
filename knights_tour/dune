@@ -1,6 +1,6 @@
 (library 
-  (name lib)
-  (public_name knights-tour.lib)
+  (name knights_tour)
+  (public_name knights_tour)
   (libraries graphics)
   (inline_tests)
   (preprocess (pps ppx_inline_test ppx_expect))

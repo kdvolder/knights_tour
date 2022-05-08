@@ -1,4 +1,4 @@
-open Lib
+open Knights_tour
 open Horsejump
 
 let report_solution = function

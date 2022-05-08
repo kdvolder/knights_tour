@@ -6,8 +6,8 @@ description: "See https://en.wikipedia.org/wiki/Knight%27s_tour"
 maintainer: ["kris.de.volder@gmail.com"]
 authors: ["Kris De Volder"]
 license: "MIT"
-homepage: "https://github.com/kdvolder/knights-tour"
-bug-reports: "https://github.com/kdvolder/knights-tour/issues"
+homepage: "https://github.com/kdvolder/knights_tour"
+bug-reports: "https://github.com/kdvolder/knights_tour/issues"
 depends: [
   "dune" {>= "3.1"}
   "ocaml" {>= "4.14.0"}
@@ -31,4 +31,4 @@ build: [
     "@doc" {with-doc}
   ]
 ]
-dev-repo: "git+https://github.com/kdvolder/knights-tour.git"
+dev-repo: "git+https://github.com/kdvolder/knights_tour.git"

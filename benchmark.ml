@@ -1,4 +1,4 @@
-open Lib
+open Knights_tour
 let runtime task =
   let t_start = Unix.gettimeofday () in
   task ();
