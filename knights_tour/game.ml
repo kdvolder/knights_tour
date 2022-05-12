@@ -1,8 +1,8 @@
-type point = {x: int; y:int}
+open Point
 
 type move = {
-  from: point;
-  dest: point;
+  from: Point.t;
+  dest: Point.t;
 }
 
 let ( ** ) (xs:'a list) (ys:'b list) =
@@ -68,13 +68,13 @@ module Board : sig
   val size : t -> int
   val make : int -> t
   val to_string : t -> string
-  val inRange : t -> point -> bool
-  val get : t -> point -> int option
-  val set : t -> point -> int option -> unit
+  val inRange : t -> Point.t -> bool
+  val get : t -> Point.t -> int option
+  val set : t -> Point.t -> int option -> unit
   val draw : t -> unit
   val isValid : t -> bool
-  val isValidTarget : t -> point -> bool
-  val count_targets : t -> point -> int
+  val isValidTarget : t -> Point.t -> bool
+  val count_targets : t -> Point.t -> int
 
 end = struct
 
@@ -167,7 +167,7 @@ module GameState : sig
 end = struct
 
   type t = {
-    mutable horse: point;
+    mutable horse: Point.t;
     mutable step: int;
     board: Board.t
   }

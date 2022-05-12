@@ -21,11 +21,20 @@ val return : 'a -> 'a t
     *)
 val bind : 'a t -> ('a -> 'b t) -> 'b t
 
+(** Operator syntax for [bind] *)
+val (|=>) : 'a t -> ('a -> 'b t) -> 'b t
+
 (** Apply a function to every solution of search space. *)
 val map : ('a -> 'b) -> 'a t -> 'b t
 
+(** Operator syntax for [map] *)
+val (|->) : 'a t -> ('a -> 'b) -> 'b t
+
 (** Only retains solutions that match a given condition. *)
 val filter : ('a -> bool) -> 'a t -> 'a t
+
+(** Operator syntax for [filter] *)
+val (|?>) : 'a t -> ('a -> bool) -> 'a t
 
 (** Represents a decision between multiple alternatives. *)
 val alt : 'a t list -> 'a t

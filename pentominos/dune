@@ -1,0 +1,6 @@
+(library 
+  (name pentominos)
+  (libraries graphics knights_tour)
+  (inline_tests)
+  (preprocess (pps ppx_inline_test ppx_expect))
+)

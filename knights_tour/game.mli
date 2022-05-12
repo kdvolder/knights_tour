@@ -1,8 +1,5 @@
-(** A coordinate of a square on the board.*)
-type point = { x : int; y : int; }
-
-(** A move takes a knight from one point on the board to another. *)
-type move = { from : point; dest : point; }
+(** A move takes a knight from one Point.t on the board to another. *)
+type move = { from : Point.t; dest : Point.t; }
 
 (** Checks whether this move represents a valid 'L-shaped' knight move.*)
 val moveIsValid : move -> bool
@@ -37,10 +34,10 @@ module Board :
 
     (** [Board.get b {x;y}] reads the current contents of a square of the board at a 
         given [{x;y}] coordinate. *)
-    val get : t -> point -> int option
+    val get : t -> Point.t -> int option
 
     (** [Board.set b {x;y} newContents] sets the contents of the board at a given coordinate.*)
-    val set : t -> point -> int option -> unit
+    val set : t -> Point.t -> int option -> unit
 
     (** Drays the board using the [graphics] library.*)
     val draw : t -> unit
@@ -52,15 +49,15 @@ module Board :
 
     (** Checks that given coordinate is a valid place for a knight to move to. This means that 
         the coordinate is within the board; and has not yet been visited by a knight before.*)
-    val isValidTarget : t -> point -> bool
+    val isValidTarget : t -> Point.t -> bool
 
     (** Counts the number of already visited squares in the board.*)
-    val count_targets : t -> point -> int
+    val count_targets : t -> Point.t -> int
   end
 module GameState :
   sig
 
-    (** A [GameState.t] represents the complete state of the game at a given point in time. This 
+    (** A [GameState.t] represents the complete state of the game at a given Point.t in time. This 
         includes the state of the board as well as the current position of the knight on the board.*)
     type t
 

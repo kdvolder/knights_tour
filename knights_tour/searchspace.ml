@@ -15,10 +15,12 @@ let rec bind a f = match a with
   | WithUndo (action, undo) -> 
        let action = fun () -> bind (action ()) f in
        WithUndo (action, undo)
+let (|=>) = bind
 
 let map f m = bind m (fun a -> return (f a))
-
-let filter pred = (Fun.flip bind) (fun x -> if pred x then return x else Empty)
+let (|->) m f = map f m
+let filter pred m = bind m (fun x -> if pred x then return x else Empty)
+let (|?>) m p = filter p m
 
 let withUndo action ~undo = WithUndo (action, undo)
 
