@@ -32,7 +32,7 @@ val compare : t -> t -> int
 (** Create a polyomino from a given set of points *)
 val create : PointSet.t -> t
 
-(** Gets the collecton of points that this Polyomino corresponds to *)
+(** Gets the canonical PointSet that characterizes this Polyomino *)
 val points : t -> PointSet.t
 
 (** Gets all unique variants of a given Polyomino. A variant is simlar shape 
