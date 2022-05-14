@@ -54,14 +54,14 @@ let empty = Empty
 
 let rec range from whle step = defer (fun () -> (
   if whle from then
-    return from ++ (range (step from) whle step)
+    return from ++ range (step from) whle step
   else 
     empty
 ))
 
 let int_range lo hi = range lo ((>=) hi) ((+) 1)
 
-let rec ints_from start = (return start) ++ defer (fun () -> (ints_from (1 + start)))
+let rec ints_from start = return start ++ defer (fun () -> (ints_from (1 + start)))
 let nats = ints_from 0
 
 let rec find_all space = match search space with
@@ -166,4 +166,30 @@ let%expect_test "stateful search" =
     1 x3 x2 x3 = 18
     1 x3 x3 x2 = 18
     1 x3 x3 x3 = 27 |}]
+
+let%expect_test "1 ++ 2"  = (return 1 ++ return 2)
+  |> to_seq
+  |> Seq.iter (Printf.printf "%d; ")
+  ;[%expect{| 1; 2; |}]
+  
+let%expect_test "defer (1 ++ 2)"  = defer (fun () -> (return 1 ++ return 2))
+  |> to_seq
+  |> Seq.iter (Printf.printf "%d; ")
+  ;[%expect{| 1; 2; |}]
+
+let recursive generator = 
+  let rec self = Lazy (fun () -> generator self) 
+  in self
+
+let%expect_test "recursive" = 
+  let numbers = recursive (fun numbers ->  
+    return 1 ++
+    (numbers |-> ((+) 1)) 
+  ) in 
+  numbers |> to_seq 
+  |> Seq.take 5
+  |> Seq.iter (fun x ->
+    Printf.printf "%d; " x
+  ) 
+  ;[%expect{| 1; 2; 3; 4; 5; |}]
 

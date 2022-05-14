@@ -68,6 +68,13 @@ val withUndo : (unit -> 'a t) -> undo:(unit -> unit) -> 'a t
   (only the parts of a searchspace that are actually traversed will be constructed) *)
 val defer : (unit -> 'a t)  -> 'a t
 
+(** Represents a search space constructed in a recursive manner (i.e. it refers to itself). 
+    The typical way to use this would be something like:
+
+    [let nats = recursive (fun self -> return 1 ++ (self |-> ((+ 1))))]
+    *)
+val recursive : ('a t -> 'a t) -> 'a t 
+
 (** A searchspace containing a 'range' of values generated using a kind of 'while loop'.
     [range start cond step] produces values starting at [start] and apply the [step] function
     to the previous value to produce a next value. It does so as long as the [cond] is true.
