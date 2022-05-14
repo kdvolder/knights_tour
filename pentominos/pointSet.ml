@@ -56,8 +56,8 @@ let%expect_test "pointset parsed from string image" =
   ) 
   |> iter (fun {x;y} -> (Format.printf "(%d, %d)\n" x y))
   ;[%expect{|
-    (0, 1)
     (1, 0)
+    (0, 1)
     (1, 1)
     (1, 2)
     (2, 2) |}]
