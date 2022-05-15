@@ -193,3 +193,9 @@ let%expect_test "recursive" =
   ) 
   ;[%expect{| 1; 2; 3; 4; 5; |}]
 
+let rec of_seq alts = Lazy (fun () ->
+  match Seq.uncons alts with
+  | None -> empty
+  | Some(first, rest) -> return first ++ of_seq rest
+) 
+

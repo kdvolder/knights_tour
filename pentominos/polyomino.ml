@@ -2,7 +2,7 @@ open Knights_tour
 
 type t = PointSet.t
 
-let points = Fun.id
+let points : t -> PointSet.t = Fun.id
 
 let compare = PointSet.compare
 
@@ -71,7 +71,7 @@ let%expect_test "rotate and normalize translation" =
     ####
     .#.. |}]
 
-module PointSetSet = Set.Make(PointSet)
+module PolyominoSet = Set.Make(PointSet)
 
 let variants ini = 
   let open Searchspace in
@@ -83,17 +83,19 @@ let variants ini =
       |> Fun.repeat mirror_count mirror
   )
   |> Searchspace.to_seq
-  |> PointSetSet.of_seq
-  |> PointSetSet.to_seq
+  |> PolyominoSet.of_seq
+  |> PolyominoSet.to_seq
 
-let create points = variants points 
+let create points = points
+  |> normalize_translation 
+  |> variants
   |> Seq.uncons 
   |> Option.get
   |> fun (hd, _) -> hd
 
 let of_string s = PointSet.of_string s |> create
 
-let to_string = PointSet.to_string
+let to_string p = p |> points |> PointSet.to_string
 
 let%expect_test "variants assymetric" =
   of_string
@@ -101,7 +103,7 @@ let%expect_test "variants assymetric" =
      ##
      .#
      .#"
-  |> variants
+  |> points |> variants
   |> Seq.map PointSet.to_string
   |> Seq.iter (Format.printf "-------------\n%s")
   ;[%expect{|
@@ -143,7 +145,7 @@ let%expect_test "variants symmetric" =
     ".#
      ###
      .#"
-  |> variants
+  |> points |> variants
   |> Seq.map PointSet.to_string
   |> Seq.iter (Format.printf "-------------\n%s")
   ;[%expect{|
@@ -159,7 +161,7 @@ let%expect_test "variants are equal to one another" =
      ##
      .#
      .#"
-    |> variants
+    |> points |> variants
     |> Seq.map create
     |> Array.of_seq
   in
@@ -178,3 +180,53 @@ let%expect_test "variants are equal to one another" =
       5: true true true true true true true true
       6: true true true true true true true true
       7: true true true true true true true true |}]
+
+let adjacent_point points = PointSet.adjacent points 
+  |> PointSet.to_seq |> Searchspace.of_seq
+      
+let rec of_order n =
+  let open Searchspace in (
+    let (let*) = Searchspace.bind in
+    if n<1 then
+      failwith "Illegal argument: order must >=1"
+    else if n=1 then
+      of_string "#" |> return 
+    else (
+      let* smaller_piece = of_order (n - 1) |-> points in
+      let* adjacent_point = adjacent_point smaller_piece in (
+        let enlarged_piece = PointSet.add adjacent_point smaller_piece in
+        enlarged_piece |> create |> return
+      )
+     ) 
+     |> Searchspace.to_seq |> PolyominoSet.of_seq |> PolyominoSet.to_seq
+     |> Searchspace.of_seq
+  ) 
+
+let print_polyos n =
+  let polys = of_order n |> Searchspace.to_seq in
+  polys |> Seq.iteri (fun i piece -> 
+    let open Printf in
+    printf "=============\n";
+    printf "%d:\n" (i+1);
+    printf "-------------\n";
+    printf "%s\n" (to_string piece)
+  ) 
+
+let%expect_test "mono-minos" =
+  print_polyos 1
+  ;[%expect{|
+    ---------
+    1:
+    # |}]
+
+let%expect_test "do-minos" =
+  print_polyos 2
+  ;[%expect]
+
+let%expect_test "3-minos" =
+  print_polyos 3
+  ;[%expect]
+
+let%expect_test "tetro-minos" =
+  print_polyos 4
+  ;[%expect]

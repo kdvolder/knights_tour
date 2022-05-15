@@ -96,5 +96,38 @@ let%expect_test "to_string" =
     .#........
     ##........
     .######### |}] 
-  
-  
+
+let neighbours Point.{x;y} = Point.[
+  { x = x - 1 ; y         };
+  { x         ; y = y - 1 };
+  { x = x + 1 ; y         };
+  { x         ; y = y + 1 }
+] |> of_list
+
+let flatmap f points = fold (fun elt acc -> union (f elt) acc) points empty
+
+let adjacent points = 
+  let all_neighbours = points |> flatmap neighbours in
+  diff all_neighbours points
+
+let%expect_test "adjacent" =
+  let input = of_string "
+    #
+    #
+    ##
+  " in
+  input
+  |> adjacent
+  |> (fun adjacent -> 
+    Printf.printf "org: (%d, %d)\n" (min_x input) (min_y input);
+    Printf.printf "adj: (%d, %d)\n" (min_x adjacent) (min_y adjacent);
+    Printf.printf "%s\n" (to_string adjacent)
+  )
+  ;[%expect{|
+    org: (0, 1)
+    adj: (-1, 0)
+    .#..
+    #.#.
+    #.#.
+    #..#
+    .##. |}]

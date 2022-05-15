@@ -20,6 +20,8 @@
     - translated
 *)
 
+open Knights_tour
+
 (** An unplaced polyomino puzzle piece. It is characterized by a normalized
     PointSet, making it invariant to any combination 90 degree rotation, 
     mirroring, and translation.*)
@@ -35,15 +37,18 @@ val create : PointSet.t -> t
 (** Gets the canonical PointSet that characterizes this Polyomino *)
 val points : t -> PointSet.t
 
-(** Gets all unique variants of a given Polyomino. A variant is simlar shape 
+(** Gets all variants of a given Polyomino. A variant is simlar shape 
     obtained by applying rotation and mirroring transformations (but no translation).
     I.e. it is a specific orientation of Polyomino that has not yet been placed
-    on a specific location of the board.*)
+    on a specific location of the board. *)
 val variants : t -> PointSet.t Seq.t
 
 (** Takes a 'string image' of a pointset and parses it.
-    See [PointSet.of_string] for details about the format.*)
+    See [PointSet.of_string] for details about the  format.*)
 val of_string : string -> t
 
 (** Create a 'string-image' of the polyomino*)
 val to_string : t -> string
+
+(** Obtain all unique polymino of order [n] *)
+val of_order : int -> t Searchspace.t

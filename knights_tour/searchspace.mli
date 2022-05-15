@@ -97,9 +97,13 @@ val int_range : int -> int -> int t
 val search : 'a t -> ('a * 'a t) option
 
 (** Converts a searchspace into a [Seq] of its solutions. The solutions are produced
-    incrementally as required. So it is fine to convert a searchspace infinite solutions
+    incrementally as required. So it is fine to convert a searchspace of infinite solutions
     to a [Seq]. *)
 val to_seq : 'a t -> 'a Seq.t
+
+(** Represents a decision between multiple potentially infinite alternatives as
+    given by the elements of a [Seq]*)
+val of_seq : 'a Seq.t -> 'a t
 
 (** searchspace containing all natural numbers. WARNING: must handle with care because
     it is an infinite searchspace.*)

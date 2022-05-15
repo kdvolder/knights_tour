@@ -35,3 +35,8 @@ val max_y : t -> int
 val of_string : string -> t
 
 val to_string : t -> string
+
+(** Gets the set of adjacent points. A point is adjacent if it satisfies both:
+    - it is a 'neighbour of any one of the point in the input; and
+    - it is not a point in the input itself *)
+val adjacent: t -> t
