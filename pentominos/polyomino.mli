@@ -52,3 +52,6 @@ val to_string : t -> string
 
 (** Obtain all unique polymino of order [n] *)
 val of_order : int -> t Searchspace.t
+
+(** Print string image of polyomino to a formatter *)
+val pp_poly : Format.formatter -> t -> unit [@@ocaml.toplevel_printer]

@@ -10,19 +10,7 @@ let rotate_point Point.{x;y} = Point.{x = -y; y = x}
 
 let mirror_point Point.{x;y} = Point.{y = x; x = y}
 
-let translate (delta : Point.t) = PointSet.map (fun {x; y} -> {
-  x = x + delta.x;
-  y = y + delta.y
-})
-
-(** Translates all points so that all points x and a y coordinates are greater or equal to 0; 
-    and have the smallest possible values given these conditions (i.e there is at 
-    least on point with [x = 0], and one point (possibly a different one) with [y = 0])) *)
-let normalize_translation points =
-  let min_x = points |> PointSet.min_x in
-  let min_y = points |> PointSet.min_y in
-  translate {x = -min_x; y = -min_y} points 
-let rotate points = PointSet.map rotate_point points |> normalize_translation
+let rotate points = PointSet.map rotate_point points |> PointSet.normalize_translation
 let mirror = PointSet.map mirror_point
 
 let%expect_test "rotate and normalize translation" =
@@ -87,7 +75,7 @@ let variants ini =
   |> PolyominoSet.to_seq
 
 let create points = points
-  |> normalize_translation 
+  |> PointSet.normalize_translation 
   |> variants
   |> Seq.uncons 
   |> Option.get
@@ -215,18 +203,68 @@ let print_polyos n =
 let%expect_test "mono-minos" =
   print_polyos 1
   ;[%expect{|
-    ---------
+    =============
     1:
+    -------------
     # |}]
 
 let%expect_test "do-minos" =
   print_polyos 2
-  ;[%expect]
+  ;[%expect{|
+    =============
+    1:
+    -------------
+    ## |}]
 
 let%expect_test "3-minos" =
   print_polyos 3
-  ;[%expect]
+  ;[%expect{|
+    =============
+    1:
+    -------------
+    ###
+
+    =============
+    2:
+    -------------
+    ##
+    #. |}]
 
 let%expect_test "tetro-minos" =
   print_polyos 4
-  ;[%expect]
+  ;[%expect{|
+    =============
+    1:
+    -------------
+    ####
+
+    =============
+    2:
+    -------------
+    ###
+    #..
+
+    =============
+    3:
+    -------------
+    ###
+    .#.
+
+    =============
+    4:
+    -------------
+    ##
+    ##
+
+    =============
+    5:
+    -------------
+    ##.
+    .## |}]
+
+let pp_poly out poly =
+  let open Format in
+  pp_open_vbox out 5;
+  fprintf out "\n%s" (to_string poly);
+  pp_close_box out ()
+

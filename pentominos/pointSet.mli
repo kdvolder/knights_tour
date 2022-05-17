@@ -40,3 +40,8 @@ val to_string : t -> string
     - it is a 'neighbour of any one of the point in the input; and
     - it is not a point in the input itself *)
 val adjacent: t -> t
+
+(** Translates the pointset so that all points [x] and [y] coordinates are greater or equal to 0; 
+and have the smallest possible values given these conditions (i.e there is at 
+least one point with [x = 0], and one point (possibly a different one) with [y = 0])) *)
+val normalize_translation : t -> t

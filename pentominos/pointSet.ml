@@ -131,3 +131,13 @@ let%expect_test "adjacent" =
     #.#.
     #..#
     .##. |}]
+
+let translate (delta : Point.t) = map (fun {x; y} -> {
+  x = x + delta.x;
+  y = y + delta.y
+})
+
+let normalize_translation points =
+  let min_x = points |> min_x in
+  let min_y = points |> min_y in
+  translate {x = -min_x; y = -min_y} points 
