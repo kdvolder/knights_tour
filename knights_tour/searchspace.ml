@@ -214,3 +214,13 @@ let no_dup (type a) (compare : a -> a -> int) inputs =
   |> InputSet.to_seq
   |> of_seq
 
+let%expect_test "no_dup" =
+  (
+    let* num1 = int_range 1 5 in
+    let* num2 = int_range 1 5 in
+    return (num1 * num2)
+  )
+  |> no_dup Int.compare
+  |> to_seq
+  |> Seq.iter (Printf.printf "%d; ")
+  ; [%expect{| 1; 2; 3; 4; 5; 6; 8; 9; 10; 12; 15; 16; 20; 25; |}]
