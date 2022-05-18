@@ -199,3 +199,18 @@ let rec of_seq alts = Lazy (fun () ->
   | Some(first, rest) -> return first ++ of_seq rest
 ) 
 
+let set_of_compare (type a) (compare : a -> a -> int) =
+  let module Comp : Set.OrderedType with type t = a = struct
+    type t = a
+    let compare = compare
+  end in
+  let module SetOf = Set.Make(Comp) in
+  (module SetOf : Set.S with type elt = a)
+
+let no_dup (type a) (compare : a -> a -> int) inputs =
+  let module InputSet = (val set_of_compare compare : Set.S with type elt = a) in 
+  inputs |> to_seq
+  |> InputSet.of_seq
+  |> InputSet.to_seq
+  |> of_seq
+

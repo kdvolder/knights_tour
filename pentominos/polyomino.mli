@@ -41,7 +41,7 @@ val points : t -> PointSet.t
     obtained by applying rotation and mirroring transformations (but no translation).
     I.e. it is a specific orientation of Polyomino that has not yet been placed
     on a specific location of the board. *)
-val variants : t -> PointSet.t Seq.t
+val variants : t -> PointSet.t List.t
 
 (** Takes a 'string image' of a pointset and parses it.
     See [PointSet.of_string] for details about the  format.*)

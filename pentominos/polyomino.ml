@@ -1,10 +1,18 @@
 open Knights_tour
 
-type t = PointSet.t
+(** A Polyomino is represented as a list of variants. Each variant is
+    a PointSet that has been normalize by PointSet.normalize_translation;
+    but has a different shape obtaining by mirroring and translation.
+    The first variant in the list is considered as the 'canonical' 
+    representation and can be used to compare two polyominos to
+    see if they are 'equal' *)
+type t = PointSet.t list
 
-let points : t -> PointSet.t = Fun.id
+let points : t -> PointSet.t = function 
+  | canonical_rep::_ -> canonical_rep
+  | [] -> failwith "Bug: this should not be possible. A polymino should have at least 1 variant."
 
-let compare = PointSet.compare
+let compare p1 p2 = PointSet.compare (points p1) (points p2)
 
 let rotate_point Point.{x;y} = Point.{x = -y; y = x}
 
@@ -59,9 +67,9 @@ let%expect_test "rotate and normalize translation" =
     ####
     .#.. |}]
 
-module PolyominoSet = Set.Make(PointSet)
 
-let variants ini = 
+let calculate_variants ini = 
+  let module PointSetSet = Set.Make(PointSet) in
   let open Searchspace in
   (
     int_range 0 1 |=> fun mirror_count ->
@@ -71,15 +79,15 @@ let variants ini =
       |> Fun.repeat mirror_count mirror
   )
   |> Searchspace.to_seq
-  |> PolyominoSet.of_seq
-  |> PolyominoSet.to_seq
+  |> PointSetSet.of_seq
+  |> PointSetSet.to_seq
+  |> List.of_seq
 
 let create points = points
   |> PointSet.normalize_translation 
-  |> variants
-  |> Seq.uncons 
-  |> Option.get
-  |> fun (hd, _) -> hd
+  |> calculate_variants
+
+let variants = Fun.id
 
 let of_string s = PointSet.of_string s |> create
 
@@ -91,9 +99,9 @@ let%expect_test "variants assymetric" =
      ##
      .#
      .#"
-  |> points |> variants
-  |> Seq.map PointSet.to_string
-  |> Seq.iter (Format.printf "-------------\n%s")
+  |> variants
+  |> List.map PointSet.to_string
+  |> List.iter (Format.printf "-------------\n%s")
   ;[%expect{|
     -------------
     ####
@@ -133,9 +141,9 @@ let%expect_test "variants symmetric" =
     ".#
      ###
      .#"
-  |> points |> variants
-  |> Seq.map PointSet.to_string
-  |> Seq.iter (Format.printf "-------------\n%s")
+  |> variants
+  |> List.map PointSet.to_string
+  |> List.iter (Format.printf "-------------\n%s")
   ;[%expect{|
     -------------
     .#.
@@ -149,14 +157,13 @@ let%expect_test "variants are equal to one another" =
      ##
      .#
      .#"
-    |> points |> variants
-    |> Seq.map create
-    |> Array.of_seq
+    |> variants
+    |> Array.of_list
   in
     vars |> Array.iteri (fun i1 v1 ->
       printf "%d: " i1;
       vars |> Array.iter (fun v2 ->
-        printf "%b " ((compare v1 v2) = 0)
+        printf "%b " ((compare (create v1) (create v2)) = 0)
       );
       printf "\n"
     ) ; [%expect{|
@@ -174,21 +181,21 @@ let adjacent_point points = PointSet.adjacent points
       
 let rec of_order n =
   let open Searchspace in (
-    let (let*) = Searchspace.bind in
     if n<1 then
       failwith "Illegal argument: order must >=1"
     else if n=1 then
       of_string "#" |> return 
     else (
-      let* smaller_piece = of_order (n - 1) |-> points in
-      let* adjacent_point = adjacent_point smaller_piece in (
-        let enlarged_piece = PointSet.add adjacent_point smaller_piece in
-        enlarged_piece |> create |> return
-      )
-     ) 
-     |> Searchspace.to_seq |> PolyominoSet.of_seq |> PolyominoSet.to_seq
-     |> Searchspace.of_seq
-  ) 
+      let with_duplicates = of_order (n - 1) |-> points |=> (fun smaller_piece ->
+        adjacent_point smaller_piece |=> (fun adjacent_point ->
+          PointSet.add adjacent_point smaller_piece
+          |> create
+          |> return
+        )
+      ) in 
+      with_duplicates |> Searchspace.no_dup compare
+    )
+  )
 
 let print_polyos n =
   let polys = of_order n |> Searchspace.to_seq in

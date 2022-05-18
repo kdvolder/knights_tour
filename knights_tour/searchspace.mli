@@ -111,3 +111,8 @@ val nats : int t
 
 (** searchspace of all pairs of natural numbers *)
 val nat_pairs : (int * int) t
+
+(** filters out duplicate solutions. Note that this operation is quite expensive because
+    it creates a Set data structure to keep track of all previously encountered elements
+    in order to detect any duplicates. *)
+val no_dup : ('a -> 'a -> int) -> 'a t -> 'a t
