@@ -134,7 +134,6 @@ let%expect_test "infinite tuple walk" = nat_pairs
   |> Seq.iter (fun (x,y) -> Format.printf "(%d,%d); " x y)
   ; [%expect{| (0,0); (1,0); (1,1); (2,0); (2,1); (2,2); (3,0); (3,1); (3,2); (3,3); |}]
 
-
 let%expect_test "stateful search" = 
   let state = ref 1 in
   let multiply mul = (
@@ -208,7 +207,7 @@ let set_of_compare (type a) (compare : a -> a -> int) =
   (module SetOf : Set.S with type elt = a)
 
 let no_dup (type a) (compare : a -> a -> int) inputs =
-  let module InputSet = (val set_of_compare compare : Set.S with type elt = a) in 
+  let module InputSet = (val set_of_compare compare : Set.S with type elt = a) in
   inputs |> to_seq
   |> InputSet.of_seq
   |> InputSet.to_seq

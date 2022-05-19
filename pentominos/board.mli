@@ -71,3 +71,8 @@ val get : t -> Point.t -> square
     ]}
 *)
 val of_string : string -> t
+
+(** Place a polyomino on the board. It is assumed that the
+    given PointSet is a rotated / mirrored / translated variant
+    of the given Polyomino. *)
+val put : t -> PointSet.t -> Polyomino.t -> t
