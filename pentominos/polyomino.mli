@@ -27,12 +27,17 @@ open Knights_tour
     mirroring, and translation.*)
 type t
 
+(** Gets the 'name' of a polyomino. The name is unique for polyomino of a the same
+    order (i.e. if two polyominos have the same order and the same name, it means
+    they are the same polyomino)*)
+val name : t -> char
+
 (** Compares two polymoninos to see if they represent the same shape;
     invariant to rotation, mirroring and translation*)
 val compare : t -> t -> int
 
-(** Create a polyomino from a given set of points *)
-val create : PointSet.t -> t
+(** The number of squares in a polyomino is called its 'order'.*)
+val order : t -> int
 
 (** Gets the canonical PointSet that characterizes this Polyomino *)
 val points : t -> PointSet.t
@@ -42,10 +47,6 @@ val points : t -> PointSet.t
     I.e. it is a specific orientation of Polyomino that has not yet been placed
     on a specific location of the board. *)
 val variants : t -> PointSet.t List.t
-
-(** Takes a 'string image' of a pointset and parses it.
-    See [PointSet.of_string] for details about the  format.*)
-val of_string : string -> t
 
 (** Create a 'string-image' of the polyomino*)
 val to_string : t -> string

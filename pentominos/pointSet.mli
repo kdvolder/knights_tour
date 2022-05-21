@@ -45,3 +45,12 @@ val adjacent: t -> t
 and have the smallest possible values given these conditions (i.e there is at 
 least one point with [x = 0], and one point (possibly a different one) with [y = 0])) *)
 val normalize_translation : t -> t
+
+(** Gets all 'variants' of a given PointSet. A variant is similar shape 
+    obtained by applying rotation and mirroring transformations; and then
+    applying [normalize_translation].*)
+val variants : t -> t list
+
+(** Gets a canonical representation of a pointset that can be used to represent
+    all variants. *)
+val normalize : t -> t

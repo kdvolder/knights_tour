@@ -141,3 +141,165 @@ let normalize_translation points =
   let min_x = points |> min_x in
   let min_y = points |> min_y in
   translate {x = -min_x; y = -min_y} points 
+
+let rotate_point Point.{x;y} = Point.{x = -y; y = x}
+
+let mirror_point Point.{x;y} = Point.{y = x; x = y}
+
+let rotate points = map rotate_point points |> normalize_translation
+let mirror = map mirror_point
+  
+let variants ini = 
+  let module PointSetSet = Set.Make(struct 
+    type nonrec t = t
+    let compare = compare 
+  end) in
+  let open Searchspace in
+  (
+    int_range 0 1 |=> fun mirror_count ->
+    int_range 0 3 |-> fun rot_count -> 
+      ini |> normalize_translation
+      |> Fun.repeat rot_count rotate 
+      |> Fun.repeat mirror_count mirror
+  )
+  |> Searchspace.to_seq
+  |> PointSetSet.of_seq
+  |> PointSetSet.to_seq
+  |> List.of_seq
+  
+  
+let normalize points = 
+  points
+  |> variants
+  |> List.hd
+  
+let%expect_test "variants assymetric" =
+  of_string
+    ".# 
+     ##
+     .#
+     .#"
+  |> variants
+  |> List.map to_string
+  |> List.iter (Format.printf "-------------\n%s")
+  ;[%expect{|
+    -------------
+    ####
+    .#..
+    -------------
+    ####
+    ..#.
+    -------------
+    #.
+    ##
+    #.
+    #.
+    -------------
+    #.
+    #.
+    ##
+    #.
+    -------------
+    .#..
+    ####
+    -------------
+    .#
+    ##
+    .#
+    .#
+    -------------
+    .#
+    .#
+    ##
+    .#
+    -------------
+    ..#.
+    #### |}]
+
+let%expect_test "variants symmetric" = 
+  of_string
+    ".#
+     ###
+     .#"
+  |> variants
+  |> List.map to_string
+  |> List.iter (Format.printf "-------------\n%s")
+  ;[%expect{|
+    -------------
+    .#.
+    ###
+    .#. |}]
+
+  
+let%expect_test "normalized rep of variants are equal to one another" =
+  let open Printf in
+  let vars = of_string
+    ".# 
+     ##
+     .#
+     .#"
+    |> variants
+    |> Array.of_list
+  in
+    vars |> Array.iteri (fun i1 v1 ->
+      printf "%d: " i1;
+      vars |> Array.iter (fun v2 ->
+        printf "%b " ((compare (normalize v1) (normalize v2)) = 0)
+      );
+      printf "\n"
+    ) ; [%expect{|
+      0: true true true true true true true true
+      1: true true true true true true true true
+      2: true true true true true true true true
+      3: true true true true true true true true
+      4: true true true true true true true true
+      5: true true true true true true true true
+      6: true true true true true true true true
+      7: true true true true true true true true |}]
+
+let%expect_test "rotate and normalize translation" =
+  let points = of_string (
+    ".#     
+      ##      
+      .#
+      .#"
+  ) in
+  for i = 0 to 3 do
+    Fun.repeat i rotate points
+    |> (fun points -> 
+      Printf.printf "=======================\n%!";
+      Printf.printf "min_x : %d   min_y : %d\n%!" (min_x points) (min_y points);
+      Printf.printf "=======================\n%!";
+      Printf.printf "%s\n%!" (to_string points)
+    )
+  done 
+  ; [%expect{|
+    =======================
+    min_x : 0   min_y : 0
+    =======================
+    .#
+    ##
+    .#
+    .#
+
+    =======================
+    min_x : 0   min_y : 0
+    =======================
+    ..#.
+    ####
+
+    =======================
+    min_x : 0   min_y : 0
+    =======================
+    #.
+    #.
+    ##
+    #.
+
+    =======================
+    min_x : 0   min_y : 0
+    =======================
+    ####
+    .#.. |}]
+
+    
