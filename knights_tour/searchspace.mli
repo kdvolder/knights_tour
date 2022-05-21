@@ -105,6 +105,9 @@ val to_seq : 'a t -> 'a Seq.t
     given by the elements of a [Seq]*)
 val of_seq : 'a Seq.t -> 'a t
 
+(** Represents a decision between mupliple values as given by a list*)
+val of_list : 'a list -> 'a t
+
 (** searchspace containing all natural numbers. WARNING: must handle with care because
     it is an infinite searchspace.*)
 val nats : int t

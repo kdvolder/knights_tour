@@ -198,6 +198,10 @@ let rec of_seq alts = Lazy (fun () ->
   | Some(first, rest) -> return first ++ of_seq rest
 ) 
 
+let rec of_list = function
+  | [] -> empty
+  | x::xs -> return x ++ of_list xs
+
 let set_of_compare (type a) (compare : a -> a -> int) =
   let module Comp : Set.OrderedType with type t = a = struct
     type t = a

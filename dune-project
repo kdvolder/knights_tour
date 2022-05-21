@@ -1,6 +1,6 @@
 (lang dune 3.1)
 (name knights_tour)
-(version 0.0.1)
+(version 0.0.2)
 
 (generate_opam_files true)
 
@@ -11,7 +11,7 @@
 
 (package
  (name knights_tour)
- (synopsis "Solves the Knight's tour puzzle")
+ (synopsis "Solves the Knight's tour puzzle; and others")
  (description "See https://en.wikipedia.org/wiki/Knight%27s_tour")
  (depends 
   ("ocaml" (>= "4.14.0")) 

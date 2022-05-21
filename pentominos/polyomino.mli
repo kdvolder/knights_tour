@@ -20,8 +20,6 @@
     - translated
 *)
 
-open Knights_tour
-
 (** An unplaced polyomino puzzle piece. It is characterized by a normalized
     PointSet, making it invariant to any combination 90 degree rotation, 
     mirroring, and translation.*)
@@ -52,7 +50,7 @@ val variants : t -> PointSet.t List.t
 val to_string : t -> string
 
 (** Obtain all unique polymino of order [n] *)
-val of_order : int -> t Searchspace.t
+val of_order : int -> t list
 
 (** Print string image of polyomino to a formatter *)
 val pp_poly : Format.formatter -> t -> unit [@@ocaml.toplevel_printer]

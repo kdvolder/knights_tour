@@ -38,7 +38,7 @@ let of_string img =
     squares = PointSet.fold (fun vacant board -> PointMap.add vacant None board) vacancies PointMap.empty
   }
 
-let classic_board = of_string "
+let classic = of_string "
   ########
   ########
   ########
@@ -50,7 +50,7 @@ let classic_board = of_string "
 
 let%expect_test "Board of_string |> vacant" =
   let open Printf in
-  let board = classic_board in
+  let board = classic in
   printf "min x: %d y: %d\n" (PointSet.min_x (vacant board)) (PointSet.min_y (vacant board));
   printf "max x: %d y: %d\n" (PointSet.max_x (vacant board)) (PointSet.max_y (vacant board));
   printf "size = (%d, %d)\n" (size board).x (size board).y;
@@ -97,8 +97,8 @@ let to_string board =
 
 let%expect_test "Place a polyomino" =
   let polyos = Polyomino.of_order 5 in
-  let board = classic_board in
-  polyos |> Searchspace.to_seq |> Seq.iteri (fun i poly ->
+  let board = classic in
+  polyos |> List.iteri (fun i poly ->
     Printf.printf "%d:\n" (i+1);
     let board = put board (Polyomino.points poly) poly in
     Printf.printf "%s\n" (to_string board)

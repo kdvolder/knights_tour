@@ -54,3 +54,6 @@ val variants : t -> t list
 (** Gets a canonical representation of a pointset that can be used to represent
     all variants. *)
 val normalize : t -> t
+
+(** Move all points an equal distance in both x and y coordinates *)
+val translate : Point.t -> t -> t

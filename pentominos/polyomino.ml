@@ -48,10 +48,12 @@ let of_order n =
     nextName := (Char.code !nextName) + 1 |> Char.chr;
     p
   )
+  |> Searchspace.to_seq
+  |> List.of_seq
 
 let print_polyos n =
-  let polys = of_order n |> Searchspace.to_seq in
-  polys |> Seq.iteri (fun i piece -> 
+  let polys = of_order n in
+  polys |> List.iteri (fun i piece -> 
     let open Printf in
     printf "=============\n";
     printf "%d:\n" (i+1);
@@ -120,6 +122,86 @@ let%expect_test "tetro-minos" =
     -------------
     ##.
     .## |}]
+
+let%expect_test "pento-minos" =
+  print_polyos 5
+  ;[%expect{|
+    =============
+    1:
+    -------------
+    #####
+
+    =============
+    2:
+    -------------
+    ####
+    #...
+
+    =============
+    3:
+    -------------
+    ####
+    .#..
+
+    =============
+    4:
+    -------------
+    ###
+    ##.
+
+    =============
+    5:
+    -------------
+    ###
+    #.#
+
+    =============
+    6:
+    -------------
+    ###
+    #..
+    #..
+
+    =============
+    7:
+    -------------
+    ###
+    .#.
+    .#.
+
+    =============
+    8:
+    -------------
+    ###.
+    ..##
+
+    =============
+    9:
+    -------------
+    ##.
+    .##
+    .#.
+
+    =============
+    10:
+    -------------
+    ##.
+    .##
+    ..#
+
+    =============
+    11:
+    -------------
+    ##.
+    .#.
+    .##
+
+    =============
+    12:
+    -------------
+    .#.
+    ###
+    .#. |}]
 
 let pp_poly out poly =
   let open Format in

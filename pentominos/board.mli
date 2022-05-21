@@ -72,7 +72,15 @@ val get : t -> Point.t -> square
 *)
 val of_string : string -> t
 
+(** Classic Pentomino board. A chess board with the 4 center squares blocked off.*)
+val classic : t
+
 (** Place a polyomino on the board. It is assumed that the
     given PointSet is a rotated / mirrored / translated variant
     of the given Polyomino. *)
 val put : t -> PointSet.t -> Polyomino.t -> t
+
+(** Gets all vacant points on the board (i.e. any point that is not occupied and is not blocked)*)
+val vacant : t -> PointSet.t
+
+val to_string : t -> string
