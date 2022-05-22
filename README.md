@@ -1,12 +1,12 @@
 Knights Tour
 ------------
 
-An ocaml puzzle solver that solves the classic [Knight's Tour](https://en.wikipedia.org/wiki/Knight%27s_tour).
+An ocaml puzzle solver that solves the classic [Knight's Tour](https://en.wikipedia.org/wiki/Knight%27s_tour) and [Pentomino](https://en.wikipedia.org/wiki/Pentomino) puzzles.
 
 To run the solver:
 
 ```
-dune exec ./knight_solve.exe
+dune exec ./knight_solve.exe # Solve knights_tour
 ```
 
 To play the game yourself interactively:
@@ -15,9 +15,19 @@ To play the game yourself interactively:
 dune exec ./knight_play.exe
 ```
 
+## Pentominos
+
+To run the solver:
+
+```
+dune exec ./pento_solve.exe
+```
+
 ## Opam install
 
-TODO: Once we figured out how to publish a package on opam.
+```
+opam install knigths_tour
+```
 
 ## Api docs
 
@@ -31,3 +41,4 @@ Module. The rest of the code isn't really as useful or re-usable and has almost 
 
 However the code that creates a 'searchspace' to solve the puzzle is [here](https://github.com/kdvolder/knights_tour/v0.0.1/master/knights_tour/game.ml#L237)
 and may make for a good example on how it is intended to be used.
+

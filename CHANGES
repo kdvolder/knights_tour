@@ -1,3 +1,9 @@
+## v0.0.2 (2022-05-22)
+
+Exploration of solving a different type of puzzle (i.e. Pentominos).
+Added some extra convenience methods into the SearchEngine module.
+Improved the docs.
+
 ## v0.0.1 (2022-05-8)
 
 Initial release. A simple program that solves the Knight's Tour puzzle.
