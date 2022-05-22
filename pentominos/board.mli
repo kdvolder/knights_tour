@@ -83,4 +83,13 @@ val put : t -> PointSet.t -> Polyomino.t -> t
 (** Gets all vacant points on the board (i.e. any point that is not occupied and is not blocked)*)
 val vacant : t -> PointSet.t
 
+(** Convert board into a two-dimensional 'string image'. Each square on the board is
+    represented by a single character:
+    
+    - `.`: a vacant square
+    - a capital letter: square occupied by polyomino with that name
+    - #: a blocked square *)
 val to_string : t -> string
+
+(** Draw the board using the [graphics] library*)
+val draw : t -> unit

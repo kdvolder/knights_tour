@@ -223,3 +223,56 @@ let%expect_test "Place a polyomino" =
     ........
     ........
     ........ |}]
+
+let draw_size = 32
+
+module CharMap = Map.Make(Char)
+let color_table : Graphics.color CharMap.t = 
+  let ct = ref CharMap.empty in
+  for i = 1 to 14 do
+    let ch = (Char.code 'A') + i - 1 |> Char.chr in
+    let r = i mod 2 in
+    let i = i / 2 in
+    let g = i mod 2 in
+    let i = i / 2 in
+    let b = i mod 2 in
+    let i = i / 2 in
+    let dark = (i mod 2) * 100 + 100 in
+    ct := CharMap.add ch (Graphics.rgb (200-dark*r) (200-dark*g) (200-dark*b)) !ct
+  done;
+  !ct
+
+let%expect_test "color table" =
+  color_table |> CharMap.iter (fun k v ->
+    Printf.printf "'%c' -> %d\n" k v
+  )
+  ; [%expect{|
+    'A' -> 6605000
+    'B' -> 13133000
+    'C' -> 6579400
+    'D' -> 13158500
+    'E' -> 6604900
+    'F' -> 13132900
+    'G' -> 6579300
+    'H' -> 13158600
+    'I' -> 51400
+    'J' -> 13107400
+    'K' -> 200
+    'L' -> 13158400
+    'M' -> 51200
+    'N' -> 13107200 |}]
+
+let color_of = function 
+| Vacant -> Graphics.white
+| Blocked -> Graphics.black
+| Occupied p -> CharMap.find (Polyomino.name p) color_table
+let draw (board:t) = 
+  Graphics.set_font "12x24";
+  Graphics.clear_graph ();
+  let sz = size board in
+  for y = 0 to sz.y-1 do
+    for x = 0 to sz.x-1 do
+      Graphics.set_color (get board {x;y} |> color_of);
+      Graphics.fill_rect (x*draw_size) (y*draw_size) draw_size draw_size
+    done
+  done

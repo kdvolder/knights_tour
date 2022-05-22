@@ -27,7 +27,20 @@ let print_solution i board =
       print_endline (Board.to_string board)
     end *)
 
+let new_graphical_progress_reporter puzzle =
+  let sz = Board.size puzzle.Puzzle.board in
+  Graphics.open_graph (Printf.sprintf " %dx%d" (sz.x * 32) (sz.y * 32));
+  let best = ref Int.max_int in
+  fun _ Puzzle.{board;pieces} -> (
+    let pieces_left = List.length pieces in
+    if pieces_left <= !best then (
+      best := pieces_left;
+      Board.draw board;
+      Unix.sleepf 0.025
+    )
+  )
+
 let () =
-  Puzzle.solve puzzle 
+  Puzzle.solve ~report_progress:(new_graphical_progress_reporter puzzle) puzzle 
   |> Searchspace.to_seq
   |> Seq.iteri print_solution
