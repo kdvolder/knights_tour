@@ -7,14 +7,13 @@ open Knights_tour
 
 (** Data type representing the state of a puzzle.*)
 type t = {
-    (** pieces remaining to be placed *)
-    pieces : Polyomino.t list;
-    (** board upon which to place the pieces. Maybe some pieces are
-        already on the board for a partially solved puzzle. *)
-    board : Board.t;
+    pieces : Polyomino.t list; (** pieces remaining to be placed *)
+    board : Board.t; (** board upon which to place the pieces. For a (partially) solved
+                         puzzle it tracks what piece occupies each square. *)
+
 }
 
 (** The initial state of the 'classic' Pentominos puzzle.*)
 val classic : t
 
-val solve : t -> Board.t Searchspace.t
+val solve : ?report_progress:(string -> t -> unit) -> t -> Board.t Searchspace.t

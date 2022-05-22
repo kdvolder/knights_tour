@@ -11,25 +11,8 @@ let classic = {
   board = Board.classic;
 }
 
-let most_constrained_point _ targets =
-  (* TODO: this is a dummy implementation. Real implementation should determine 
-     which polyomino placements are valid for each target and then retain the
-     target with the fewest valid placements.*)
-  PointSet.choose targets
-
-let solve_aux puzzle targets = 
-  let open Searchspace in
-  if PointSet.is_empty targets then
-    return puzzle.board
-  else 
-    most_constrained_point puzzle targets 
-    |> (fun _target -> Searchspace.empty)
-
 let lowest_point board = 
   Board.vacant board |> PointSet.min_elt
-
-let solve puzzle = 
-  solve_aux puzzle (PointSet.singleton (lowest_point puzzle.board))
 
 type placement = {
   piece: Polyomino.t;
@@ -50,6 +33,88 @@ let place_one piece board target =
   )
   |-> (fun points -> {points;piece})
 
+let smallest measure xs =
+  let keep_smallest (sx,x) (sy,y) =
+    if Int.compare sx sy <= 0 then
+      (sx, x)
+    else 
+      (sy, y) in
+  match List.map (fun x -> (measure x, x)) xs with
+  | [] -> failwith "An empty list doesn't have a smallest element"
+  | fst::rst -> List.fold_left keep_smallest fst rst |> snd
+
+let%expect_test "smallest string" =
+  let cases = [
+    ["Hello"; "World"; "Very long"; "a"];
+    ["The"; "Quick"; "Brown fox"; "jumps"];
+    ["Short"; "in"; "the"; "middle"];
+    ["all"; "the"; "sam"]
+  ] in
+  cases |> List.iter (fun words -> 
+    words |> List.iter (Printf.printf "%s; ");
+    smallest String.length words |> Printf.printf " => %s\n"
+  )
+  ;[%expect]
+  
+(** Finds all valid placements for the most constrained target.*)
+let most_constrained_point {pieces; board} targets =
+  let open Searchspace in
+  let placements_per_target = targets 
+    |> PointSet.to_seq 
+    |> Seq.map (fun target -> 
+      pieces |> Searchspace.of_list 
+      |=> (fun piece -> place_one piece board target) 
+      |> Searchspace.to_seq
+      |> List.of_seq
+    ) 
+    |> List.of_seq
+  in 
+    smallest List.length placements_per_target
+    |> of_list
+
+let%expect_test "most_constrained_point" =
+  let board = Board.of_string "
+    ########
+    ########
+    ########
+    ###..###
+    ###..###
+    ########
+    #######.
+    ########
+  " in
+  let puzzle = {board; pieces=Polyomino.of_order 5} in
+  let vacancies = Board.vacant board in
+  let most_constrained = most_constrained_point puzzle vacancies in
+  most_constrained |> Searchspace.to_seq
+  |> Seq.iter (fun {piece;points} ->
+    Board.put puzzle.board points piece 
+    |> Board.to_string
+    |> Printf.printf "%s\n"
+  )
+  ;[%expect]
+  
+let rec solve_aux ~report_progress puzzle targets = 
+  let open Searchspace in
+  if PointSet.is_empty targets then (
+    report_progress "Solved" puzzle;
+    return puzzle.board
+  ) else 
+    most_constrained_point puzzle targets 
+    |=> (fun {piece; points} ->
+      let puzzle = {
+        board=Board.put puzzle.board points piece;
+        pieces=List.filter (fun p -> Polyomino.compare p piece <> 0) puzzle.pieces;
+      } in
+        report_progress "Placed a piece" puzzle;
+        let targets = PointSet.union targets (PointSet.adjacent points)
+          |> PointSet.filter (fun pt -> (Board.get puzzle.board pt) = Vacant) in
+        solve_aux ~report_progress puzzle targets
+    )
+
+let solve ?(report_progress = fun _ _ -> ()) puzzle = 
+  solve_aux ~report_progress puzzle (PointSet.singleton (lowest_point puzzle.board))
+  
 let%expect_test "Placements of a polyomino on a target" =
   let puzzle = classic in
   let pentos = puzzle.pieces in
