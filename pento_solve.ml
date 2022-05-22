@@ -1,7 +1,7 @@
 open Knights_tour
 open Pentominos
 
-let puzzle = Puzzle.classic
+let puzzle = Puzzle.classic_no_symmetric_solutions
 
 let print_solution i board = 
   print_endline ((Int.to_string (i + 1)) ^ ":");

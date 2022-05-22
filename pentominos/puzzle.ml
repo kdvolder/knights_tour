@@ -11,6 +11,10 @@ let classic = {
   board = Board.classic;
 }
 
+let classic_no_symmetric_solutions = {
+  classic with pieces = classic.pieces |> Polyomino.pin_symmetry 
+}
+
 let lowest_point board = 
   Board.vacant board |> PointSet.min_elt
 

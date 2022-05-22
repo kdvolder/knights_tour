@@ -16,4 +16,9 @@ type t = {
 (** The initial state of the 'classic' Pentominos puzzle.*)
 val classic : t
 
+(** Same as the 'classic' puzzle, but one assymetric puzzle piece deliberately has
+    all but one of its variants removed (this ensures that symmetric solutions are
+    eliminated, by not allowing that one piece to only be used in one orientation)*)
+val classic_no_symmetric_solutions : t
+
 val solve : ?report_progress:(string -> t -> unit) -> t -> Board.t Searchspace.t

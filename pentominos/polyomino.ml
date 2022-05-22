@@ -61,6 +61,48 @@ let print_polyos n =
     printf "%s\n" (to_string piece)
   ) 
 
+let pin_symmetry polyos =
+  let to_change = polyos |> List.find (fun p -> List.length (variants p) = 8) in
+  polyos |> List.map (fun p ->
+    if p.name = to_change.name then
+      {p with variants = [List.hd p.variants]}
+    else 
+      p (*no change *)
+  )
+
+let%expect_test "pin_symmetry of tetro-minos" =
+  let tetros = of_order 4 |> pin_symmetry in
+  tetros |> List.iter (fun tetro ->
+    Printf.printf "===================\nvariants: %d\n\n%s"
+      (List.length (variants tetro))
+      (to_string tetro)
+  );
+  [%expect {|
+    ===================
+    variants: 2
+
+    ####
+    ===================
+    variants: 1
+
+    ###
+    #..
+    ===================
+    variants: 4
+
+    ###
+    .#.
+    ===================
+    variants: 1
+
+    ##
+    ##
+    ===================
+    variants: 4
+
+    ##.
+    .## |}]
+
 let%expect_test "mono-minos" =
   print_polyos 1
   ;[%expect{|

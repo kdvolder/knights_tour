@@ -54,3 +54,8 @@ val of_order : int -> t list
 
 (** Print string image of polyomino to a formatter *)
 val pp_poly : Format.formatter -> t -> unit [@@ocaml.toplevel_printer]
+
+(** Find the first polyomino that is completely assymetric and remove all but
+    one of its variants. This is a 'hack' that allows eliminating equivalent
+    symmetric solutions from a puzzle.*)
+val pin_symmetry : t list -> t list
