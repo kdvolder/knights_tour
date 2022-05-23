@@ -1,6 +1,6 @@
 (executables
- (names        pento_solve solve        play        benchmark)
- (public_names pento_solve knight_solve knight_play -)
+ (names        pento_solve hexo_solve solve        play        benchmark)
+ (public_names pento_solve hexo_solve knight_solve knight_play -)
  (libraries stdio graphics unix knights_tour pentominos))
 ; (executables
 ;  (names playground benchmark)

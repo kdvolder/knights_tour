@@ -226,53 +226,56 @@ let%expect_test "Place a polyomino" =
 
 let draw_size = 32
 
-module CharMap = Map.Make(Char)
-let color_table : Graphics.color CharMap.t = 
-  let ct = ref CharMap.empty in
-  for i = 1 to 14 do
-    let ch = (Char.code 'A') + i - 1 |> Char.chr in
-    let r = i mod 2 in
-    let i = i / 2 in
-    let g = i mod 2 in
-    let i = i / 2 in
-    let b = i mod 2 in
-    let i = i / 2 in
-    let dark = (i mod 2) * 100 + 100 in
-    ct := CharMap.add ch (Graphics.rgb (200-dark*r) (200-dark*g) (200-dark*b)) !ct
-  done;
-  !ct
+let color_table : Graphics.color array = 
+  let color_levels = [230; 130; 30] in
+  let ct = Array.make (List.length color_levels |> (fun x-> x*x*x)) Graphics.black in
+  let idx = ref 0 in
+  color_levels |> List.iter (fun r -> 
+    color_levels |> List.iter (fun g -> 
+      color_levels |> List.iter (fun b -> 
+        ct.(!idx) <- Graphics.rgb r g b;
+        idx := !idx + 1
+      )
+    )
+  );
+  ct
 
-let%expect_test "color table" =
-  color_table |> CharMap.iter (fun k v ->
-    Printf.printf "'%c' -> %d\n" k v
-  )
-  ; [%expect{|
-    'A' -> 6605000
-    'B' -> 13133000
-    'C' -> 6579400
-    'D' -> 13158500
-    'E' -> 6604900
-    'F' -> 13132900
-    'G' -> 6579300
-    'H' -> 13158600
-    'I' -> 51400
-    'J' -> 13107400
-    'K' -> 200
-    'L' -> 13158400
-    'M' -> 51200
-    'N' -> 13107200 |}]
+let color_code pento_name = 
+  (Char.code pento_name - Char.code 'A') mod (Array.length color_table)
 
 let color_of = function 
 | Vacant -> Graphics.white
 | Blocked -> Graphics.black
-| Occupied p -> CharMap.find (Polyomino.name p) color_table
+| Occupied p -> color_table.(color_code (Polyomino.name p))
+
+let vert_line x y =
+  Graphics.moveto (x*draw_size) (y*draw_size);
+  Graphics.lineto (x*draw_size) ((y+1)*draw_size)
+
+let hori_line x y = 
+  Graphics.moveto (x*draw_size) (y*draw_size);
+  Graphics.lineto ((x+1)*draw_size) (y*draw_size)
+
 let draw (board:t) = 
   Graphics.set_font "12x24";
   Graphics.clear_graph ();
   let sz = size board in
+  (* filling squares *)
   for y = 0 to sz.y-1 do
     for x = 0 to sz.x-1 do
       Graphics.set_color (get board {x;y} |> color_of);
       Graphics.fill_rect (x*draw_size) (y*draw_size) draw_size draw_size
     done
+  done;
+  (* drawing boundaries *)
+  Graphics.set_line_width 2;
+  Graphics.set_color Graphics.white;
+  for y = 0 to sz.y do
+    for x = 0 to sz.x do
+      if get board {x;y} <> get board {x=x-1;y} then
+        vert_line x y;
+      if get board {x;y} <> get board {x;y=y-1} then
+        hori_line x y;
+    done
   done
+
