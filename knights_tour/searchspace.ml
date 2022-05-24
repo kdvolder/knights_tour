@@ -1,17 +1,17 @@
 type 'a t = 
   | Result of 'a
-  | Fork of 'a t * 'a t 
+  | Fork of 'a t list 
   | Lazy of (unit -> 'a t)
   | WithUndo of (unit -> 'a t) * (unit -> unit)
-  | Empty
 
 let return x = Result x
 
+let empty = Fork []
+
 let rec bind a f = match a with
   | Result a -> Lazy (fun () -> (f a))
-  | Fork (l,r) -> Fork (bind l f, bind r f)
+  | Fork choices -> Fork (choices |> List.map (fun choice -> bind choice f))
   | Lazy l -> Lazy (fun () ->  bind (l ()) f)
-  | Empty -> Empty
   | WithUndo (action, undo) -> 
        let action = fun () -> bind (action ()) f in
        WithUndo (action, undo)
@@ -19,26 +19,24 @@ let (|=>) = bind
 
 let map f m = bind m (fun a -> return (f a))
 let (|->) m f = map f m
-let filter pred m = bind m (fun x -> if pred x then return x else Empty)
+let filter pred m = bind m (fun x -> if pred x then return x else empty)
 let (|?>) m p = filter p m
 
 let withUndo action ~undo = WithUndo (action, undo)
 
-let alt2 x y = Fork (x, y)
+let alt2 x y = Fork [x; y]
 
-let rec alt = function
-  | [] -> Empty
-  | (x::xs) -> Fork (x, alt xs)
+let alt choices = Fork choices
 
 let (++) = alt2
 
 let rec search = function 
-  | Empty -> None
-  | Result r -> Some (r, Empty)
-  | Fork (left, right) -> ( 
+  | Result r -> Some (r, empty)
+  | Fork [] -> None
+  | Fork (left::right) -> ( 
       match search left with
-      | Some (left, leftRest) -> Some (left, Fork (leftRest, right)) 
-      | None -> search right
+      | Some (left, leftRest) -> Some (left, Fork (leftRest::right)) 
+      | None -> search (Fork right)
   )
   | Lazy l -> l () |> search
   | WithUndo (action, undo) ->
@@ -49,8 +47,6 @@ let rec search = function
           Some (first, withUndo (fun () -> rest) ~undo:undo)
 
 let defer l = Lazy l
-
-let empty = Empty
 
 let rec range from whle step = defer (fun () -> (
   if whle from then
