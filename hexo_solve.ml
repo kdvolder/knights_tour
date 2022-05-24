@@ -16,7 +16,7 @@ let puzzle = Puzzle.{
     0##################
     1##################
   ";
-    pieces = Polyomino.of_order 6
+    pieces = Polyomino.of_order 6 |> Polyomino.randomize
 }
 
 let print_solution i board = 
@@ -51,12 +51,9 @@ let new_graphical_progress_reporter puzzle =
   fun _ Puzzle.{board;pieces} -> (
     steps := !steps + 1;
     let pieces_left = List.length pieces in
-    if pieces_left <= !best then (
+    if pieces_left <= !best || !steps mod 100_000 = 0 then (
       best := pieces_left;
-      Board.draw board;
-      Printf.printf "Step %d: best = %d\n%!" !steps !best;
-      steps := 0
-      (* ;Unix.sleepf 2.0 *)
+      Board.draw board
     )
   )
 

@@ -6,6 +6,13 @@ Make graphical drawing of polyomino board more pleasing to the eye:
 - each piece has a different color.
 - borders around the pieces to make them stand out more.
 
+Add some randomization to the Hexo puzzle solver to make it more
+interesting. It still does a 'complete' search however by
+randomizing the order in which puzzle pieces and variants are
+tried it will find different solutions on each run. Randomizations
+also more often than not find a solution much faster than the
+default ordering.
+
 ## v0.0.2 (2022-05-22)
 
 Exploration of solving a different type of puzzle (i.e. Pentominos).

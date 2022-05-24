@@ -59,3 +59,8 @@ val pp_poly : Format.formatter -> t -> unit [@@ocaml.toplevel_printer]
     one of its variants. This is a 'hack' that allows eliminating equivalent
     symmetric solutions from a puzzle.*)
 val pin_symmetry : t list -> t list
+
+(** Randomize the order of puzzle pieces and their variants. This can make
+    running puzzle solvers more interesting as it then tends to produce
+    different solutions each time you run it. *)
+val randomize : t list -> t list

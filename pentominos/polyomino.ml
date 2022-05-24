@@ -46,10 +46,19 @@ let of_order n =
   |> Searchspace.map (fun points ->
     let p = {name = !nextName; variants = PointSet.variants points} in
     nextName := (Char.code !nextName) + 1 |> Char.chr;
+    if !nextName='[' then  
+      nextName := 'a'; 
     p
   )
   |> Searchspace.to_seq
   |> List.of_seq
+
+let randomize polys = 
+  polys 
+  |> List.map (fun poly -> 
+    {poly with variants=poly.variants |> Randomize.list}
+  )
+  |> Randomize.list
 
 let print_polyos n =
   let polys = of_order n in
