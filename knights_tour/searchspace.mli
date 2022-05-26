@@ -91,14 +91,24 @@ val range : 'a -> ('a -> bool) -> ('a -> 'a) -> 'a t
     *)
 val int_range : int -> int -> int t 
 
-(** Search for the next solution. If a solution is found, returns it
-    alongside a reduced searchspace that can be used to search for more solutions.
+(** Search for the next solution in a depth-first fashion until a solution is found or
+    the searchspace is exhausted. If a solution is found, returns it alongside a reduced 
+    searchspace that can be used to search for more solutions.
     Otherwise it returns [None] *)
 val search : 'a t -> ('a * 'a t) option
 
-(** Converts a searchspace into a [Seq] of its solutions. The solutions are produced
-    incrementally as required. So it is fine to convert a searchspace of infinite solutions
-    to a [Seq]. *)
+(** Search in a breadth-first fashion. Note that a breadth-first search
+    has a tendency to explore more and more parts of a searchpace at the same time as it keeps on
+    expanding and exploring branches in parallet. This can have a tendency to requre 
+    exponentionally more and more memory. To avoid a virtualy unbounded blow up in memory usage,
+    a limit is put on the maximum number of simulataneously active paths. When this number is 
+    reached or exceeded then the search reverst to a depth-first search which has the effect
+    of exploring some branches in depth and this reducing the number of active branches.*)
+val breadth_search : int ->  'a t -> ('a * 'a t) option
+
+(** Converts a searchspace into a [Seq] of its solutions. The solutions are 
+    produced incrementally as required. So it is fine to convert a searchspace 
+    of infinite solutions to a [Seq]. *)
 val to_seq : 'a t -> 'a Seq.t
 
 (** Represents a decision between multiple potentially infinite alternatives as
