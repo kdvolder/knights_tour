@@ -81,5 +81,5 @@ let new_graphical_progress_reporter puzzle =
 
 let () =
   Puzzle.solve ~report_progress:(new_graphical_progress_reporter puzzle) puzzle 
-  |> Searchspace.to_seq
+  |> Searchspace.to_seq ~search:(Searchspace.breadth_search 1000)
   |> Seq.iteri print_solution
