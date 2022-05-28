@@ -63,6 +63,8 @@ let rec search = function
       | Some (first, rest) ->
           Some (first, withUndo (fun () -> rest) ~undo:undo)
 
+type 'a search_fun = 'a t -> ('a * 'a t) option
+
 let rec breadth_search_aux limit stack =
   let pop worklist =
     if Treequence.size worklist < limit then
@@ -90,10 +92,10 @@ let rec breadth_search_aux limit stack =
 let breadth_search limit space =
   breadth_search_aux limit (Treequence.singleton space) 
 
-let rec to_seq (space:'a t) () =
+let rec to_seq ?(search=search) space () =
   match search space with
   | None -> Seq.Nil
-  | Some (fst,rst) -> Seq.Cons (fst, to_seq rst) 
+  | Some (fst,rst) -> Seq.Cons (fst, to_seq ~search rst) 
 
 let rec of_list = function
   | [] -> empty
@@ -241,3 +243,16 @@ let%expect_test "no_dup" =
   |> to_seq
   |> Seq.iter (Printf.printf "%d; ")
   ; [%expect{| 1; 2; 3; 4; 5; 6; 8; 9; 10; 12; 15; 16; 20; 25; |}]
+
+let%expect_test "breadth_search" =
+[4; 10] |> List.iter (fun limit ->
+  (
+    let* num1 = int_range 1 5 in
+    let* num2 = int_range 1 5 in
+    return (num1 , num2)
+  )
+  |> to_seq ~search:(breadth_search limit)
+  |> Seq.iter (fun (x, y) -> (Printf.printf "(%d, %d) " x y))
+  ; Printf.printf("\n")
+)
+; [%expect]

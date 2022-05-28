@@ -84,11 +84,17 @@ val range : 'a -> ('a -> bool) -> ('a -> 'a) -> 'a t
     *)
 val int_range : int -> int -> int t 
 
+(** This module provides different search functions that may explore the choices
+    in a searchspace in a different order. Other functions that such as [to_seq]
+    may take a [search_fun] as a parameter (which will determine the order in
+    which results are produced) *)
+type 'a search_fun = 'a t -> ('a * 'a t) option
+
 (** Search for the next solution in a depth-first fashion until a solution is found or
     the searchspace is exhausted. If a solution is found, returns it alongside a reduced 
     searchspace that can be used to search for more solutions.
     Otherwise it returns [None] *)
-val search : 'a t -> ('a * 'a t) option
+val search : 'a search_fun
 
 (** Search in a breadth-first fashion. Note that a breadth-first search
     has a tendency to explore more and more parts of a searchpace at the same time as it keeps on
@@ -97,12 +103,13 @@ val search : 'a t -> ('a * 'a t) option
     a limit is put on the maximum number of simulataneously active paths. When this number is 
     reached or exceeded then the search reverst to a depth-first search which has the effect
     of exploring some branches in depth and this reducing the number of active branches.*)
-val breadth_search : int ->  'a t -> ('a * 'a t) option
+val breadth_search : int ->  'a search_fun
 
 (** Converts a searchspace into a [Seq] of its solutions. The solutions are 
     produced incrementally as required. So it is fine to convert a searchspace 
-    of infinite solutions to a [Seq]. *)
-val to_seq : 'a t -> 'a Seq.t
+    of infinite solutions to a [Seq]. An optional [search_fun] may be provided
+    to alter the order in which solutions are being generated. *)
+val to_seq : ?search:'a search_fun -> 'a t -> 'a Seq.t
 
 (** Represents a decision between multiple potentially infinite alternatives as
     given by the elements of a [Seq]*)
