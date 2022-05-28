@@ -10,6 +10,8 @@ let size = function
 
 let empty = Empty
 
+let is_empty t = size t = 0
+
 let singleton x = Single x
 
 let append xs ys = match xs, ys with
@@ -36,6 +38,11 @@ let rec pop_end = function
 | Append {lt; rt=Single x; _} -> Some(x, lt)
 | Append {lt=a; rt=Append{lt=b; rt=c; _}; _} ->
     pop_end (append (append a b) c)
+
+let rec map f = function
+| Empty -> Empty 
+| Single x -> Single (f x)
+| Append {sz; lt; rt} -> Append {sz; lt=map f lt; rt=map f rt}   
 
 let rec to_string str = function
 | Empty -> "nil"

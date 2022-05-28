@@ -1,56 +1,39 @@
 type 'a t = 
   | Result of 'a
-  | Fork of 'a t * 'a t
-  | Empty 
+  | Fork of 'a t Treequence.t
   | Lazy of (unit -> 'a t)
   | WithUndo of (unit -> 'a t) * (unit -> unit)
 
 let return x = Result x
 
-let alt2 x y = Fork(x, y)
+let alt2 x y = Fork Treequence.(
+  append (singleton x) (singleton y)
+)
 
-let rec alt = function
-  | [] -> Empty
-  | x::xs -> alt2 x (alt xs)
+let alt choices = Fork (List.fold_right Treequence.push choices Treequence.empty)
 
-let empty = alt []
+let empty = Fork Treequence.empty
 
 let rec bind a f = match a with
   | Result a -> Lazy (fun () -> (f a))
-  | Fork(l,r) -> Fork(bind l f, bind r f)
-  | Empty -> Empty
+  | Fork choices -> Fork ( 
+    choices |> Treequence.map (fun choice -> bind choice f)
+  )
   | Lazy l -> Lazy (fun () ->  bind (l ()) f)
   | WithUndo (action, undo) -> 
        let action = fun () -> bind (action ()) f in
        WithUndo (action, undo)
-let (|=>) = bind
 
 let map f m = bind m (fun a -> return (f a))
+
+let filter pred m = bind m (fun q -> if pred q then return q else empty)
+
+let (|=>) = bind
 let (|->) m f = map f m
-let filter pred m = bind m (fun x -> if pred x then return x else empty)
 let (|?>) m p = filter p m
-
-let withUndo action ~undo = WithUndo (action, undo)
-
 let (++) = alt2
 
-let rec search = function 
-  | Result r -> Some (r, empty)
-  | Empty -> None
-  | Fork (left, right) -> ( 
-      match search left with
-      | Some (left, leftRest) -> Some (left, Fork (leftRest, right)) 
-      | None -> search right
-  )
-  | Lazy l -> l () |> search
-  | WithUndo (action, undo) ->
-      let space = action () in
-      match search space with 
-      | None -> undo (); None
-      | Some (first, rest) ->
-          Some (first, withUndo (fun () -> rest) ~undo:undo)
-
-let breadth_search _limit = search  (* fake implementation for now *)
+let withUndo action ~undo = WithUndo (action, undo)
 
 let defer l = Lazy l
 
@@ -63,46 +46,105 @@ let rec range from whle step = defer (fun () -> (
 
 let int_range lo hi = range lo ((>=) hi) ((+) 1)
 
+let rec search = function 
+  | Result r -> Some (r, empty)
+  | Fork choices -> (match Treequence.pop choices with 
+    | None -> None
+    | Some (first, rest) -> (match search first with
+      | None -> search (Fork rest)
+      | Some (found, first_rest) -> Some (found, alt2 first_rest (Fork rest))
+    )
+  )   
+  | Lazy l -> l () |> search
+  | WithUndo (action, undo) ->
+      let space = action () in
+      match search space with 
+      | None -> undo (); None
+      | Some (first, rest) ->
+          Some (first, withUndo (fun () -> rest) ~undo:undo)
+
+let rec breadth_search_aux limit stack =
+  let pop worklist =
+    if Treequence.size worklist < limit then
+      (* broaden search by choosing the oldest choice point to explore further *)
+      Treequence.pop_end worklist
+    else 
+      (* narrow search by choosing the newest choice point to explore further (which tends to
+         follow a single 'track/path/subtree' of choices until it is 'exhausted' / reaches a conclusion) *)
+      Treequence.pop worklist
+    in
+  match pop stack with 
+  | None -> None
+  | Some (item, stack) -> (match item with
+    | Result x -> Some (x, Fork stack)
+    | Fork choices -> Treequence.append choices stack 
+        |> breadth_search_aux limit
+    | Lazy producer -> Treequence.push (producer ()) stack 
+        |> breadth_search_aux limit
+    | WithUndo (action, undo) ->
+      match action () |> search with 
+      | None -> undo (); None
+      | Some (first, rest) ->
+          Some (first, withUndo (fun () -> rest) ~undo:undo)
+  )
+let breadth_search limit space =
+  breadth_search_aux limit (Treequence.singleton space) 
+
+let rec to_seq (space:'a t) () =
+  match search space with
+  | None -> Seq.Nil
+  | Some (fst,rst) -> Seq.Cons (fst, to_seq rst) 
+
+let rec of_list = function
+  | [] -> empty
+  | x::xs -> return x ++ of_list xs
+
 let rec ints_from start = return start ++ defer (fun () -> (ints_from (1 + start)))
 let nats = ints_from 0
 
-let rec find_all space = match search space with
- | Some (first, rest) -> first :: find_all rest
- | None -> []
+let rec of_seq alts = Lazy (fun () ->
+  match Seq.uncons alts with
+  | None -> empty
+  | Some(first, rest) -> return first ++ of_seq rest
+)
 
-let to_dispenser (searchspace : 'a t) = 
-    let state = ref (Some searchspace) in
-    fun () -> 
-      match !state with
-      | None -> None
-      | Some searchspace -> (
-          match search searchspace with
-          | None -> None
-          | Some (first, rest) -> (
-            state := Some rest;
-            Some first
-          ) 
-      )
+let ( let* ) = bind
 
-let to_seq (searchspace:'a t) = Seq.of_dispenser (to_dispenser searchspace)
+let nat_pairs =
+  let* x = nats in
+  let* y = int_range 0 x in
+  return (x,y)
 
+let set_of_compare (type a) (compare : a -> a -> int) =
+  let module Comp : Set.OrderedType with type t = a = struct
+    type t = a
+    let compare = compare
+  end in
+  let module SetOf = Set.Make(Comp) in
+  (module SetOf : Set.S with type elt = a)
+  
+let no_dup (type a) (compare : a -> a -> int) inputs =
+  let module InputSet = (val set_of_compare compare : Set.S with type elt = a) in
+  inputs |> to_seq
+  |> InputSet.of_seq
+  |> InputSet.to_seq
+  |> of_seq
+  
 let%expect_test "range 1..4" = 
   let searchspace = int_range 1 4 in
-  find_all searchspace |> List.iter (fun result ->
+  to_seq searchspace |> Seq.iter (fun result ->
     Format.printf "%d; " result
   ) ; [%expect{| 1; 2; 3; 4; |}]
-
-let (let*) = bind 
 
 let%expect_test "sum of two ranges" =
     (
       let numbers = int_range 1 4 in
-      let* x = numbers in
-      let* y = numbers in
+      let* x:int = numbers in
+      let* y:int = numbers in
         return (Format.sprintf "%d + %d = %d" x y (x + y))
     ) 
-    |> find_all
-    |> List.iter print_endline
+    |> to_seq
+    |> Seq.iter print_endline
     ; [%expect{|
       1 + 1 = 2
       1 + 2 = 3
@@ -125,11 +167,6 @@ let%expect_test "find some results in infinite searchspace" = nats
     |> to_seq |> Seq.take 5 
     |> Seq.iter (Format.printf "%d; ")
     ; [%expect{| 0; 1; 2; 3; 4; |}]
-
-let nat_pairs =
-  let* x = nats in
-  let* y = int_range 0 x in
-  return (x,y)
 
 let%expect_test "infinite tuple walk" = nat_pairs
   |> to_seq |> Seq.take 10 
@@ -193,31 +230,6 @@ let%expect_test "recursive" =
     Printf.printf "%d; " x
   ) 
   ;[%expect{| 1; 2; 3; 4; 5; |}]
-
-let rec of_seq alts = Lazy (fun () ->
-  match Seq.uncons alts with
-  | None -> empty
-  | Some(first, rest) -> return first ++ of_seq rest
-) 
-
-let rec of_list = function
-  | [] -> empty
-  | x::xs -> return x ++ of_list xs
-
-let set_of_compare (type a) (compare : a -> a -> int) =
-  let module Comp : Set.OrderedType with type t = a = struct
-    type t = a
-    let compare = compare
-  end in
-  let module SetOf = Set.Make(Comp) in
-  (module SetOf : Set.S with type elt = a)
-
-let no_dup (type a) (compare : a -> a -> int) inputs =
-  let module InputSet = (val set_of_compare compare : Set.S with type elt = a) in
-  inputs |> to_seq
-  |> InputSet.of_seq
-  |> InputSet.to_seq
-  |> of_seq
 
 let%expect_test "no_dup" =
   (
