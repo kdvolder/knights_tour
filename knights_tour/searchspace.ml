@@ -50,7 +50,7 @@ let rec search = function
       | Some (first, rest) ->
           Some (first, withUndo (fun () -> rest) ~undo:undo)
 
-let breadth_search _limit = search
+let breadth_search _limit = search  (* fake implementation for now *)
 
 let defer l = Lazy l
 
