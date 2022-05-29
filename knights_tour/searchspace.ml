@@ -65,32 +65,36 @@ let rec search = function
 
 type 'a search_fun = 'a t -> ('a * 'a t) option
 
-let rec breadth_search_aux limit stack =
+let rec breadth_search_aux limit stackmon steps stack =
+  let steps = ref (steps + 1) in
   let pop worklist =
-    if Treequence.size worklist < limit then
+    if !steps > Treequence.size worklist * limit then (
       (* broaden search by choosing the oldest choice point to explore further *)
+      stackmon "pop_end" !steps worklist;
+      steps := 0;
       Treequence.pop_end worklist
-    else 
+    ) else ( 
       (* narrow search by choosing the newest choice point to explore further (which tends to
          follow a single 'track/path/subtree' of choices until it is 'exhausted' / reaches a conclusion) *)
-      Treequence.pop worklist
-    in
+        stackmon "pop" !steps worklist;
+        Treequence.pop worklist
+    ) in
   match pop stack with 
   | None -> None
   | Some (item, stack) -> (match item with
     | Result x -> Some (x, Fork stack)
     | Fork choices -> Treequence.append choices stack 
-        |> breadth_search_aux limit
+        |> breadth_search_aux limit stackmon !steps
     | Lazy producer -> Treequence.push (producer ()) stack 
-        |> breadth_search_aux limit
+        |> breadth_search_aux limit stackmon !steps
     | WithUndo (action, undo) ->
       match action () |> search with 
       | None -> undo (); None
       | Some (first, rest) ->
           Some (first, withUndo (fun () -> rest) ~undo:undo)
   )
-let breadth_search limit space =
-  breadth_search_aux limit (Treequence.singleton space) 
+let breadth_search limit ?(stack_mon=fun _ _ _ -> ()) space =
+  breadth_search_aux limit stack_mon 0 (Treequence.singleton space) 
 
 let rec to_seq ?(search=search) space () =
   match search space with

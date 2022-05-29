@@ -38,6 +38,18 @@ let of_string img =
     squares = PointSet.fold (fun vacant board -> PointMap.add vacant None board) vacancies PointMap.empty
   }
 
+let rectangle w h =
+  let open Searchspace in
+    int_range 0 (w - 1) |=> (fun x ->
+      int_range 0 (h - 1) |-> (fun y -> (Point.{x;y}, None))
+    )
+    |> to_seq
+    |> PointMap.of_seq
+    |> fun squares -> {
+      size = Point.{x=w;y=h};
+      squares
+    }
+
 let classic = of_string "
   ########
   ########
@@ -224,7 +236,8 @@ let%expect_test "Place a polyomino" =
     ........
     ........ |}]
 
-let draw_size = 32
+let draw_size = 64
+let margin = 2
 
 let color_table : Graphics.color array = 
   let color_levels = [230; 130; 30] in
@@ -248,23 +261,34 @@ let color_of = function
 | Blocked -> Graphics.black
 | Occupied p -> color_table.(color_code (Polyomino.name p))
 
+let to_screen xy = (xy*draw_size+margin) 
+
 let vert_line x y =
-  Graphics.moveto (x*draw_size) (y*draw_size);
-  Graphics.lineto (x*draw_size) ((y+1)*draw_size)
+  Graphics.moveto (to_screen x) (to_screen y);
+  Graphics.lineto (to_screen x) (to_screen (y+1))
 
 let hori_line x y = 
-  Graphics.moveto (x*draw_size) (y*draw_size);
-  Graphics.lineto ((x+1)*draw_size) (y*draw_size)
+  Graphics.moveto (to_screen x) (to_screen y);
+  Graphics.lineto (to_screen (x+1)) (to_screen y)
 
+
+let draw_border board = 
+  Graphics.set_line_width 1;
+  Graphics.set_color (Graphics.black);
+  Graphics.draw_rect 
+    ((to_screen 0) - 2) ((to_screen 0) - 2)
+    (draw_size * board.size.x + 3) (draw_size * board.size.y + 3)
+  
 let draw (board:t) = 
   Graphics.set_font "12x24";
   Graphics.clear_graph ();
+
   let sz = size board in
   (* filling squares *)
   for y = 0 to sz.y-1 do
     for x = 0 to sz.x-1 do
       Graphics.set_color (get board {x;y} |> color_of);
-      Graphics.fill_rect (x*draw_size) (y*draw_size) draw_size draw_size
+      Graphics.fill_rect (to_screen x) (to_screen y) draw_size draw_size
     done
   done;
   (* drawing boundaries *)
@@ -277,5 +301,13 @@ let draw (board:t) =
       if get board {x;y} <> get board {x;y=y-1} then
         hori_line x y;
     done
-  done
+  done;
+
+  draw_border board
+
+let init_graphics board_sz = 
+  let open Point in
+  let draw_sz = draw_size in
+  Graphics.open_graph (Printf.sprintf " %dx%d" (board_sz.x * draw_sz + 2 * margin) (board_sz.y * draw_sz + 2 * margin));
+  Graphics.set_font "12x24";
 

@@ -1,7 +1,12 @@
 open Knights_tour
 open Pentominos
 
-let puzzle = Puzzle.classic_no_symmetric_solutions
+(* let puzzle = Puzzle.classic_no_symmetric_solutions *)
+
+let puzzle = Puzzle.{
+  board = Board.rectangle 20 3;
+  pieces = Polyomino.of_order 5;
+}
 
 let print_solution i board = 
   print_endline ((Int.to_string (i + 1)) ^ ":");
@@ -29,13 +34,17 @@ let print_solution i board =
 
 let new_graphical_progress_reporter puzzle =
   let sz = Board.size puzzle.Puzzle.board in
-  Graphics.open_graph (Printf.sprintf " %dx%d" (sz.x * 32) (sz.y * 32));
+  Board.init_graphics sz;
   let best = ref Int.max_int in
   fun _ Puzzle.{board;pieces} -> (
     let pieces_left = List.length pieces in
     if pieces_left <= !best then (
       best := pieces_left;
-      Board.draw board
+      Board.draw board;
+      if pieces_left = 0 then (
+        (* print_endline "Press enter to continue..."; *)
+        read_line () |> fun _ -> ()
+      )
     )
   )
 

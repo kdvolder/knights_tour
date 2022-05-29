@@ -41,6 +41,16 @@ type square =
   | Vacant
   | Blocked
 
+(** A constant to gives the size in pixels of a polyomino square. *)
+val draw_size : int
+
+(** Initialize the graphic module to draw boards in a window on the screen. 
+    This function should only be called once, and should be called before
+    drawing the first board on the screen. It requires the dimensions of
+    the board as an input parameter (needed to open a window of the 
+    appropriate size)*)
+val init_graphics : Point.t -> unit
+
 (** Each board has a size consisting of a width and height. All non-blocked board
     coordinates are contained within the range [0..width] for the [x] coordinate
     and [0..height] for the [y] coordinate.
@@ -74,6 +84,10 @@ val of_string : string -> t
 
 (** Classic Pentomino board. A chess board with the 4 center squares blocked off.*)
 val classic : t
+
+(** [rectangle w h] creates a plain rectangular board of given dimensions. All squares in this board
+    are vacant (so there are no blocked areas inside the rectangle)*)
+val rectangle : int -> int -> t
 
 (** Place a polyomino on the board. It is assumed that the
     given PointSet is a rotated / mirrored / translated variant

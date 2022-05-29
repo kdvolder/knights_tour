@@ -103,7 +103,7 @@ val search : 'a search_fun
     a limit is put on the maximum number of simulataneously active paths. When this number is 
     reached or exceeded then the search reverst to a depth-first search which has the effect
     of exploring some branches in depth and this reducing the number of active branches.*)
-val breadth_search : int ->  'a search_fun
+val breadth_search : int ->  ?stack_mon:(string -> int -> 'a t Treequence.t -> unit) -> 'a search_fun
 
 (** Converts a searchspace into a [Seq] of its solutions. The solutions are 
     produced incrementally as required. So it is fine to convert a searchspace 
