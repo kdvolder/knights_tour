@@ -279,21 +279,23 @@ let draw_border board =
     ((to_screen 0) - 2) ((to_screen 0) - 2)
     (draw_size * board.size.x + 3) (draw_size * board.size.y + 3)
   
-let draw (board:t) = 
+let draw ?(black_and_white=false) (board:t) = 
   Graphics.set_font "12x24";
   Graphics.clear_graph ();
 
   let sz = size board in
   (* filling squares *)
+  if not black_and_white then begin
   for y = 0 to sz.y-1 do
     for x = 0 to sz.x-1 do
       Graphics.set_color (get board {x;y} |> color_of);
       Graphics.fill_rect (to_screen x) (to_screen y) draw_size draw_size
     done
-  done;
+    done
+  end;
   (* drawing boundaries *)
   Graphics.set_line_width 2;
-  Graphics.set_color Graphics.white;
+  Graphics.set_color (if black_and_white then Graphics.black else Graphics.white);
   for y = 0 to sz.y do
     for x = 0 to sz.x do
       if get board {x;y} <> get board {x=x-1;y} then
@@ -303,6 +305,7 @@ let draw (board:t) =
     done
   done;
 
+  if not black_and_white then 
   draw_border board
 
 let init_graphics board_sz = 

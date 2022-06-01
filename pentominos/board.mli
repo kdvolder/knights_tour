@@ -106,4 +106,4 @@ val vacant : t -> PointSet.t
 val to_string : t -> string
 
 (** Draw the board using the [graphics] library*)
-val draw : t -> unit
+val draw : ?black_and_white:bool -> t -> unit

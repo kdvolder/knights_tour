@@ -36,13 +36,13 @@ let new_graphical_progress_reporter puzzle =
   let sz = Board.size puzzle.Puzzle.board in
   Board.init_graphics sz;
   let best = ref Int.max_int in
-  fun _ Puzzle.{board;pieces} -> (
+  fun msg Puzzle.{board;pieces} -> (
     let pieces_left = List.length pieces in
     if pieces_left <= !best then (
       best := pieces_left;
-      Board.draw board;
-      if pieces_left = 0 then (
-        (* print_endline "Press enter to continue..."; *)
+      Board.draw ~black_and_white:true board;
+      if msg = "Solved" then (
+        print_endline "Press enter to continue...";
         read_line () |> fun _ -> ()
       )
     )
