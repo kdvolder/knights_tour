@@ -260,3 +260,97 @@ let pp_poly out poly =
   fprintf out "\n%s" (to_string poly);
   pp_close_box out ()
 
+let save out polyos =
+  polyos |> List.iter (fun polyo ->
+    Printf.fprintf out "%c:\n" polyo.name;
+    variants polyo |> List.iter (fun variant ->
+      PointSet.to_string variant 
+      |> Printf.fprintf out "%s\n"
+    );
+    Printf.fprintf out "\n"
+  );
+  Printf.fprintf out "---\n"
+
+let%expect_test "save polyos" = 
+  let out = stdout in
+  of_order 3 |> save out
+  ; [%expect{|
+    A:
+    ###
+
+    #
+    #
+    #
+
+
+    B:
+    ##
+    #.
+
+    ##
+    .#
+
+    #.
+    ##
+
+    .#
+    ##
+
+
+    --- |}] 
+
+let rec load_list terminator item_loader first_line input =
+  if first_line=terminator then
+    []
+  else
+    let first = item_loader first_line input in
+    let rest = load_list terminator item_loader (input_line input) input in
+    first :: rest
+
+let load_line first_line _input = first_line
+
+let load_variant first_line input =
+  let lines = load_list "" load_line first_line input in
+  let image = List.fold_left (fun l1 l2 -> l1 ^ "\n" ^ l2) "" lines in
+  PointSet.of_string image
+
+let load_poly first_line input =
+  let name = String.get first_line 0 in
+  let variants = load_list "" load_variant (input_line input) input in {
+    name; variants
+  }
+
+let load input =
+  load_list "---" load_poly (input_line input) input
+
+let%expect_test "load" =
+  let fle = Filename.temp_file "test" ".poly" in
+  Out_channel.with_open_text fle (fun out ->
+    of_order 3 |> save out
+  );
+  let polys = In_channel.with_open_text fle load in
+  polys |> save stdout
+  ; [%expect{|
+    A:
+    ###
+
+    #
+    #
+    #
+
+
+    B:
+    ##
+    #.
+
+    ##
+    .#
+
+    #.
+    ##
+
+    .#
+    ##
+
+
+    --- |}]

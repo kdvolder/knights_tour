@@ -64,3 +64,10 @@ val pin_symmetry : t list -> t list
     running puzzle solvers more interesting as it then tends to produce
     different solutions each time you run it. *)
 val randomize : t list -> t list
+
+(** Writes a list of polyominos and all their variants to a file or output channel *)
+val save : out_channel -> t list -> unit
+
+(** Reads a list of polyominos and all their variants from a file that was previously
+    written using [save] *)
+val load : in_channel -> t list
