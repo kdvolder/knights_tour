@@ -306,20 +306,8 @@ let%expect_test "save polyos" =
 
     --- |}] 
 
-let rec load_list terminator item_loader first_line input =
-  if first_line=terminator then
-    []
-  else
-    let first = item_loader first_line input in
-    match Seq.uncons input with
-    | None -> failwith "Unexpected end of input"
-    | Some (first_line, input) ->
-        first :: load_list terminator item_loader first_line input
-
-let load_line first_line _input = first_line
-
 let load_variant first_line input =
-  let lines = load_list "" load_line first_line input in
+  let lines = Lines.load_list "" Lines.load_line first_line input in
   let image = List.fold_left (fun l1 l2 -> l1 ^ "\n" ^ l2) "" lines in
   PointSet.of_string image
 
@@ -328,14 +316,14 @@ let load_poly first_line input =
   match Seq.uncons input with
   | None -> failwith "Unexpected end of input"
   | Some (first_line, input) ->
-      let variants = load_list "" load_variant first_line input in {
+      let variants = Lines.load_list "" load_variant first_line input in {
         name; variants
       }
 
 let load_lines input =
   Seq.uncons input |> function
   | None -> failwith "Unexpected end of input"
-  | Some (first_line, input) -> load_list "---" load_poly first_line input
+  | Some (first_line, input) -> Lines.load_list "---" load_poly first_line input
 
 let load input = input |> Lines.of_channel |> load_lines 
   

@@ -22,3 +22,10 @@ val classic : t
 val classic_no_symmetric_solutions : t
 
 val solve : ?report_progress:(string -> t -> unit) -> t -> Board.t Searchspace.t
+
+(* (** Write a textual representation of a puzzle to a channel. The format is human readable;
+    but it can also be used to restore a puzzle via the [load] function.*)
+val save : out_channel -> t -> unit
+
+(** Load a puzzle from a textual representation as produced by [save].*)
+val load : in_channel -> t *)
