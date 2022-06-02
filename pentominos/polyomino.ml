@@ -260,16 +260,23 @@ let pp_poly out poly =
   fprintf out "\n%s" (to_string poly);
   pp_close_box out ()
 
-let save out polyos =
+let pp_poly_list out polyos =
   polyos |> List.iter (fun polyo ->
-    Printf.fprintf out "%c:\n" polyo.name;
+    Format.fprintf out "%c:\n" polyo.name;
     variants polyo |> List.iter (fun variant ->
       PointSet.to_string variant 
-      |> Printf.fprintf out "%s\n"
+      |> Format.fprintf out "%s\n"
     );
-    Printf.fprintf out "\n"
+    Format.fprintf out "\n"
   );
-  Printf.fprintf out "---\n"
+  Format.fprintf out "---\n"
+
+let save out polyos =
+  let formatter = Format.formatter_of_out_channel out in
+  Format.open_vbox 0;
+  pp_poly_list formatter polyos;
+  Format.close_box ();
+  Format.pp_print_flush formatter ()
 
 let%expect_test "save polyos" = 
   let out = stdout in
@@ -304,8 +311,10 @@ let rec load_list terminator item_loader first_line input =
     []
   else
     let first = item_loader first_line input in
-    let rest = load_list terminator item_loader (input_line input) input in
-    first :: rest
+    match Seq.uncons input with
+    | None -> failwith "Unexpected end of input"
+    | Some (first_line, input) ->
+        first :: load_list terminator item_loader first_line input
 
 let load_line first_line _input = first_line
 
@@ -316,13 +325,20 @@ let load_variant first_line input =
 
 let load_poly first_line input =
   let name = String.get first_line 0 in
-  let variants = load_list "" load_variant (input_line input) input in {
-    name; variants
-  }
+  match Seq.uncons input with
+  | None -> failwith "Unexpected end of input"
+  | Some (first_line, input) ->
+      let variants = load_list "" load_variant first_line input in {
+        name; variants
+      }
 
-let load input =
-  load_list "---" load_poly (input_line input) input
+let load_lines input =
+  Seq.uncons input |> function
+  | None -> failwith "Unexpected end of input"
+  | Some (first_line, input) -> load_list "---" load_poly first_line input
 
+let load input = input |> Lines.of_channel |> load_lines 
+  
 let%expect_test "load" =
   let fle = Filename.temp_file "test" ".poly" in
   Out_channel.with_open_text fle (fun out ->

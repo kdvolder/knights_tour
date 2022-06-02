@@ -65,7 +65,9 @@ val pin_symmetry : t list -> t list
     different solutions each time you run it. *)
 val randomize : t list -> t list
 
-(** Writes a list of polyominos and all their variants to a file or output channel *)
+(** Writes a list of polyominos and all their variants in a textual format that
+    is human readable; but can also be used to restore that same list of pieces
+    and variants by [load]ing the file later. *)
 val save : out_channel -> t list -> unit
 
 (** Reads a list of polyominos and all their variants from a file that was previously
