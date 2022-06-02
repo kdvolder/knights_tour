@@ -70,6 +70,9 @@ val randomize : t list -> t list
     and variants by [load]ing the file later. *)
 val save : out_channel -> t list -> unit
 
+(** Like [save] but writes the data to [Format.formatter] instead of a [out_channel]*)
+val save_fmt : Format.formatter -> t list -> unit
+
 (** Reads a list of polyominos and all their variants from a file that was previously
     written using [save] *)
 val load : in_channel -> t list

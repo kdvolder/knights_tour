@@ -260,7 +260,7 @@ let pp_poly out poly =
   fprintf out "\n%s" (to_string poly);
   pp_close_box out ()
 
-let pp_poly_list out polyos =
+let save_fmt out polyos =
   polyos |> List.iter (fun polyo ->
     Format.fprintf out "%c:\n" polyo.name;
     variants polyo |> List.iter (fun variant ->
@@ -273,9 +273,7 @@ let pp_poly_list out polyos =
 
 let save out polyos =
   let formatter = Format.formatter_of_out_channel out in
-  Format.open_vbox 0;
-  pp_poly_list formatter polyos;
-  Format.close_box ();
+  save_fmt formatter polyos;
   Format.pp_print_flush formatter ()
 
 let%expect_test "save polyos" = 
