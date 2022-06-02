@@ -129,10 +129,3 @@ val nat_pairs : (int * int) t
     it creates a Set data structure to keep track of all previously encountered elements
     in order to detect any duplicates. *)
 val no_dup : ('a -> 'a -> int) -> 'a t -> 'a t
-
-(** Represents a search space constructed in a recursive manner (i.e. it refers to itself). 
-    The typical way to use this would be something like:
-
-    [let nats = recursive (fun self -> return 1 ++ (self |-> ((+ 1))))]
-    
-val recursive : ('a t -> 'a t) -> 'a t *)
