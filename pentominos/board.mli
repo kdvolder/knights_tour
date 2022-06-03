@@ -82,6 +82,10 @@ val get : t -> Point.t -> square
 *)
 val of_string : string -> t
 
+(** Loads a board from a string image. This requires a function that interprets
+    the characters of the string, mapping each char to [square] state*)
+val load_string : (char -> square) -> string -> t
+
 (** Classic Pentomino board. A chess board with the 4 center squares blocked off.*)
 val classic : t
 

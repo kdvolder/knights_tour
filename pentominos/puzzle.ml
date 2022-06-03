@@ -590,11 +590,9 @@ let%expect_test "Placements of all tetro-minos @(0,0)" =
       JJKKIFFF |}]
 
 let save_fmt out {pieces;board} = (
-  Format.fprintf out "%s\n" (Board.to_string board);
-  pieces |> Polyomino.save_fmt out
+  pieces |> Polyomino.save_fmt out;
+  Format.fprintf out "%s\n" (Board.to_string board)
 )
-
-let load _ = {pieces=[];board=Board.classic}
 
 let save out_channel puzzle = 
   save_fmt (Format.formatter_of_out_channel out_channel) puzzle 
@@ -603,15 +601,6 @@ let%expect_test "save puzzle" =
   let puzzle = classic in
   puzzle |> save_fmt (Format.std_formatter);
   [%expect{|
-    ........
-    ........
-    ........
-    ...##...
-    ...##...
-    ........
-    ........
-    ........
-
     A:
     #####
 
@@ -882,4 +871,316 @@ let%expect_test "save puzzle" =
     .#.
 
 
-    --- |}]
+    ---
+    ........
+    ........
+    ........
+    ...##...
+    ...##...
+    ........
+    ........
+    ........ |}]
+
+let load_lines input =
+  let pieces = Polyomino.load_lines input in 
+  let square_of_char = function 
+  | '.' -> Board.Vacant
+  | '#' -> Board.Blocked
+  | ch -> Board.Occupied (List.find (fun piece -> Polyomino.name piece = ch) pieces) 
+  in
+  let lines = Lines.load (Lines.load_list "" Lines.load_line) input in
+  let image = List.fold_right (fun l r -> l ^ "\n" ^r) lines "" in
+  let board = Board.load_string square_of_char image in {
+    board;pieces
+  }
+
+let load input = load_lines (Lines.of_channel input)
+
+let%expect_test "load from save" =
+  let puzzle = classic in
+  let tmp_file = Filename.temp_file "test" ".pento-puzzle" in
+  Out_channel.with_open_text tmp_file (fun out ->
+    save out puzzle;
+  );
+  let puzzle = In_channel.with_open_text tmp_file load in
+  save_fmt Format.std_formatter puzzle;
+  [%expect{|
+    A:
+    #####
+
+    #
+    #
+    #
+    #
+    #
+
+
+    B:
+    ####
+    #...
+
+    ####
+    ...#
+
+    ##
+    #.
+    #.
+    #.
+
+    ##
+    .#
+    .#
+    .#
+
+    #...
+    ####
+
+    #.
+    #.
+    #.
+    ##
+
+    .#
+    .#
+    .#
+    ##
+
+    ...#
+    ####
+
+
+    C:
+    ####
+    .#..
+
+    ####
+    ..#.
+
+    #.
+    ##
+    #.
+    #.
+
+    #.
+    #.
+    ##
+    #.
+
+    .#..
+    ####
+
+    .#
+    ##
+    .#
+    .#
+
+    .#
+    .#
+    ##
+    .#
+
+    ..#.
+    ####
+
+
+    D:
+    ###
+    ##.
+
+    ###
+    .##
+
+    ##.
+    ###
+
+    ##
+    ##
+    #.
+
+    ##
+    ##
+    .#
+
+    #.
+    ##
+    ##
+
+    .##
+    ###
+
+    .#
+    ##
+    ##
+
+
+    E:
+    ###
+    #.#
+
+    ##
+    #.
+    ##
+
+    ##
+    .#
+    ##
+
+    #.#
+    ###
+
+
+    F:
+    ###
+    #..
+    #..
+
+    ###
+    ..#
+    ..#
+
+    #..
+    #..
+    ###
+
+    ..#
+    ..#
+    ###
+
+
+    G:
+    ###
+    .#.
+    .#.
+
+    #..
+    ###
+    #..
+
+    .#.
+    .#.
+    ###
+
+    ..#
+    ###
+    ..#
+
+
+    H:
+    ###.
+    ..##
+
+    ##..
+    .###
+
+    #.
+    ##
+    .#
+    .#
+
+    #.
+    #.
+    ##
+    .#
+
+    .###
+    ##..
+
+    .#
+    ##
+    #.
+    #.
+
+    .#
+    .#
+    ##
+    #.
+
+    ..##
+    ###.
+
+
+    I:
+    ##.
+    .##
+    .#.
+
+    #..
+    ###
+    .#.
+
+    .##
+    ##.
+    .#.
+
+    .#.
+    ###
+    #..
+
+    .#.
+    ###
+    ..#
+
+    .#.
+    ##.
+    .##
+
+    .#.
+    .##
+    ##.
+
+    ..#
+    ###
+    .#.
+
+
+    J:
+    ##.
+    .##
+    ..#
+
+    #..
+    ##.
+    .##
+
+    .##
+    ##.
+    #..
+
+    ..#
+    .##
+    ##.
+
+
+    K:
+    ##.
+    .#.
+    .##
+
+    #..
+    ###
+    ..#
+
+    .##
+    .#.
+    ##.
+
+    ..#
+    ###
+    #..
+
+
+    L:
+    .#.
+    ###
+    .#.
+
+
+    ---
+    ........
+    ........
+    ........
+    ...##...
+    ...##...
+    ........
+    ........
+    ........ |}]

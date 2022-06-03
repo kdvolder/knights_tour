@@ -27,6 +27,24 @@ let vacant {squares;_} =
       vacancies := PointSet.add pt !vacancies
   );
   !vacancies
+
+let load_string square_of_char img = 
+  let squares = ref PointMap.empty in
+  Lines.of_string img
+  |> Seq.iteri (fun y line ->
+    line |> String.iteri (fun x ch -> 
+      match square_of_char ch with
+      | Blocked -> ()
+      | Vacant -> squares := PointMap.add Point.{x;y} None !squares
+      | Occupied p -> squares := PointMap.add Point.{x;y} (Some p) !squares
+    )
+  );
+  let points = ref PointSet.empty in
+  !squares |> PointMap.iter (fun pt _ -> points:= PointSet.add pt !points); 
+  {
+      size = Point.{x = 1 + PointSet.max_x !points; y = 1 + PointSet.max_y !points};
+      squares = !squares
+  }
   
 let of_string img =
   let vacancies = PointSet.of_string img |> PointSet.normalize_translation in

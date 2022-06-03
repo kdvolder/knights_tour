@@ -9,9 +9,12 @@ type t = string Seq.t
 
 (** Read data from a channel one line at a time. I.e this is like using the [input_line] funtion
 from [Stdlib] and the creating a Seq of the results, until the end of the input is reached.*)
-val of_channel : in_channel -> string Seq.t
+val of_channel : in_channel -> t
 
-type 'a loader = string -> string Seq.t -> 'a
+(** Split string into lines *)
+val of_string : string -> t
+
+type 'a loader = string -> t -> 'a
 
 (** [load_list terminator item_loader] produces a line-based loader which
     reads in a list of items by using [item_loader] to load one item, until
@@ -20,3 +23,6 @@ val load_list : string -> 'a loader -> 'a list loader
 
 (** A loader that loads a single line of input and returns that as its result*)
 val load_line : string loader
+
+(** Use a loader to load something *)
+val load : 'a loader -> t -> 'a

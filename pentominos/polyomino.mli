@@ -19,6 +19,7 @@
     - flipped around (mirroring along the vertical or horizontal axis)
     - translated
 *)
+open Knights_tour
 
 (** An unplaced polyomino puzzle piece. It is characterized by a normalized
     PointSet, making it invariant to any combination 90 degree rotation, 
@@ -76,3 +77,7 @@ val save_fmt : Format.formatter -> t list -> unit
 (** Reads a list of polyominos and all their variants from a file that was previously
     written using [save] *)
 val load : in_channel -> t list
+
+(** Reads a list of polyominos and all their variants from sequence of lines, as previously
+    written using [save] *)
+val load_lines : Lines.t -> t list

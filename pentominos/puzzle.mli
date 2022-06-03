@@ -27,5 +27,12 @@ val solve : ?report_progress:(string -> t -> unit) -> t -> Board.t Searchspace.t
     but it can also be used to restore a puzzle via the [load] function.*)
 val save : out_channel -> t -> unit
 
+(** Write a textual representation of a puzzle to a formatter. The format is human readable;
+    but it can also be used to restore a puzzle via the [load] function.*)
+val save_fmt : Format.formatter -> t -> unit
+
 (** Load a puzzle from a textual representation as produced by [save].*)
 val load : in_channel -> t
+
+(** Load a puzzle from a textual representation as produced by [save].*)
+val load_lines : Lines.t -> t
