@@ -1,32 +1,35 @@
 ## v0.0.3 (2022-06-11)
 
-Convert 'limit' parameter in Searchspace.breadth_search to
-an optional, labeled argumented.
+Add some randomization to the Hexo puzzle solver to make it more
+interesting. It still does a 'complete' search however by
+randomizing the order in which puzzle pieces and variants are
+tried means it will find different solutions on each run.
+Randomizations also more often than not find a solution much 
+faster than the default ordering.
 
 Remove the 'withUndo' operator from Searchspace because it
 is hard to support properly and hard to use properly without
 introducing bugs in a searchspace definition (hard to contain
 side-effects).
 
-Add a 'breadth_first' searchspace exploration algorithm that
+Add a 'breadth_search' searchspace exploration algorithm that
 gradually regresses back to dept-first search to limit memory
 usage.
 
-Add a human readable/editable texttual de/serialization format
-for specifying polymonio puzzles. 
-
-Add hexo_solve executable which solves an instance of Hexominos.
+Add a human readable textual de/serialization format
+for specifying polyomino puzzles. 
 
 Make graphical drawing of polyomino board more pleasing to the eye:
 - each piece has a different color.
 - borders around the pieces to make them stand out more.
 
-Add some randomization to the Hexo puzzle solver to make it more
-interesting. It still does a 'complete' search however by
-randomizing the order in which puzzle pieces and variants are
-tried it will find different solutions on each run. Randomizations
-also more often than not find a solution much faster than the
-default ordering.
+Add hexo_solve executable which solves an instance of Hexominos.
+
+Add random_hexo_puzzle executable which generates and saves a
+randomized hexo_puzzle to a text file.
+
+Add a `solve_file` executable that reads a polyomino puzzle 
+specification from a text file and starts solving it.
 
 ## v0.0.2 (2022-05-22)
 
