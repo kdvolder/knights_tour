@@ -48,21 +48,6 @@ val (++) : 'a t -> 'a t -> 'a t
 (** A searchspace with no solutions. *)
 val empty : 'a t
 
-(** A searchspace that is accessed by calling some side-effecting operation. 
-    Such operations must be paired with a 'undo' operation so that the backtracking
-    engine can undo the side-effect when backing out of exploring that searchspace.
-    
-    Note that if the a search space directly returns objects that contain this state
-    then this state will be 'destroyed / changed' by the search-engine as it
-    traverses the space. (Essentially the returned solution is only valid until you
-    request the next solution).
-    
-    There are different ways to avoid problems caused by this. The easiest is probably
-    to avoid stateful operations altoghether. Alternatively you can map some kind of
-    'clone' operation search using [map] before returning result to the end-user.
-    *)
-val withUndo : (unit -> 'a t) -> undo:(unit -> unit) -> 'a t
-
 (** Represents a search space constructed 'on demand' by calling function.
   This is useful to create compact/finite representations of infinite or very large searchspaces 
   (only the parts of a searchspace that are actually traversed will be constructed) *)
