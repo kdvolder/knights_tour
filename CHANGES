@@ -1,4 +1,4 @@
-## v0.0.3 (TBD)
+## v0.0.3 (2022-06-11)
 
 Convert 'limit' parameter in Searchspace.breadth_search to
 an optional, labeled argumented.
