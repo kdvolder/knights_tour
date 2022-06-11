@@ -2,14 +2,6 @@ open Knights_tour
 
 include module type of Set.Make(Point)
 
-(** Checks whether a set of points is 'coherent'. What this means is
-    that every points in the set can be reached from every other point in
-    the set via its neighbours. If we consider a pointset to represent
-    a polyomino, then it means the pointset represents a single puzzle
-    piece (rather two or more disconnected 'islands' of points). 
-    *)
-val is_coherent : t -> bool
-
 (** Find the smallest [x] coordinate in a pointset.*)
 val min_x : t -> int
 

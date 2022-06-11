@@ -61,17 +61,7 @@ let%expect_test "pointset parsed from string image" =
     (1, 1)
     (1, 2)
     (2, 2) |}]
-
-let manhatan_distance p1 p2 = 
-  let open Point in 
-  Int.abs (p1.x - p2.x) + Int.abs (p1.y - p2.y)
  
-let is_neighbour p1 p2 = (manhatan_distance p1 p2) = 1
-let is_coherent points =
-  points |> for_all (fun p -> 
-    exists (is_neighbour p) points
-  )
-
 let to_string points =
   let image = Buffer.create 60 in
   for y = min_y points to max_y points do 
