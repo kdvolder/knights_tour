@@ -4,4 +4,4 @@ dune build
 dune test
 dune-release tag -d
 dune-release tag
-dune-release --token $(cat .github_token)
+dune-release --token $(cat .github-token)
