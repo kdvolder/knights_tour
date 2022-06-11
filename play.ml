@@ -24,7 +24,7 @@ let rec play game_state =
   if moves==[] then
     print_endline "=== no more moves ===" 
   else 
-    GameState.do_move game_state (choose_move moves);
-    play game_state
+    GameState.do_move game_state (choose_move moves) 
+    |> play
 
 let () = play (GameState.make 8) 

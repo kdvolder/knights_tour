@@ -70,7 +70,7 @@ module Board : sig
   val to_string : t -> string
   val inRange : t -> Point.t -> bool
   val get : t -> Point.t -> int option
-  val set : t -> Point.t -> int option -> unit
+  val set : t -> Point.t -> int option -> t
   val draw : t -> unit
   val isValid : t -> bool
   val isValidTarget : t -> Point.t -> bool
@@ -78,13 +78,14 @@ module Board : sig
 
 end = struct
 
-  type cell = int option
+  type t = {
+    size: int;
+    cells: int PointMap.t
+  }
 
-  type t = cell array array
+  let size {size;_} = size 
 
-  let size =Array.length
-
-  let get board {x;y} = board.(x).(y)
+  let get {cells;_} pt = PointMap.find_opt pt cells
 
   let inRange board {x;y} = 
     let sz = size board in x>=0 && y>=0 && x<sz && y<sz
@@ -98,21 +99,19 @@ end = struct
     |> Seq.filter (isValidTarget board)
     |> Seq.length
 
-  let make size = Array.make_matrix size size None
+  let make size = {size; cells=PointMap.empty}
 
-  let set board {x;y} v =  
-    board.(x).(y) <- v
+  let set board pt = function
+    | None -> {board with cells = PointMap.remove pt board.cells}
+    | Some v -> {board with cells = PointMap.add pt v board.cells}
   
   let range lo hi = Seq.ints lo |> Seq.take_while (fun x -> x < hi) 
 
   let isValid (board:t) =
     let board_index = Hashtbl.create (size board |> fun x -> x*x) in
-    board |> Array.iteri (fun y row ->
-      row |> Array.iteri (fun x cel -> 
-        match cel with
-        | Some move_number -> Hashtbl.add board_index move_number {x;y}
-        | None -> ()
-      )
+    board.cells |> PointMap.to_seq
+    |> Seq.iter (fun ({x;y}, move_number) ->
+      Hashtbl.add board_index move_number {x;y}
     );
     let moves_are_valid = range 1 (size board * size board) |> Seq.map (fun move_number ->
       match Hashtbl.find_all board_index move_number with 
@@ -132,24 +131,25 @@ end = struct
   let to_string board = 
     let size = size board in
     grid_to_string size size (fun x y ->
-      cell_to_string board.(x).(y)
+      get board {x;y} |> cell_to_string
   )
 
   let draw (board:t) = 
     (* let text_size = 20 in *)
+    let size = size board in
     let adjust = 5 in
     Graphics.set_font "12x24";
     Graphics.clear_graph ();
-    board |> Array.iteri (fun r row ->
-      row |> Array.iteri (fun k cell ->
+    for r = 0 to size - 1 do
+      for k = 0 to size - 1 do
+        let cell = get board {x=k;y=r} in
         let x = k*draw_size in
-        let y = ((size board) - r - 1)*draw_size in
+        let y = (size - r - 1)*draw_size in
         Graphics.draw_rect x y draw_size draw_size;
         Graphics.moveto (x+adjust) (y+adjust);
         Graphics.draw_string (cell_to_string cell)
-      )
-    )
-
+      done
+    done
 end
 
 (* ************************* *)
@@ -161,14 +161,13 @@ module GameState : sig
   val valid_moves : t -> move list
   val steps : t -> int
   val board : t -> Board.t
-  val do_move : t -> move -> unit
-  val undo_move : t -> move -> unit
+  val do_move : t -> move -> t
   val isWinning : t -> bool
 end = struct
 
   type t = {
-    mutable horse: Point.t;
-    mutable step: int;
+    horse: Point.t;
+    step: int;
     board: Board.t
   }
 
@@ -182,18 +181,15 @@ end = struct
     let step = 1 in
     let horse = {x = 0;y = 0} in
     let board = Board.make board_size in
-      Board.set board horse (Option.some step);
+    let board = Board.set board horse (Option.some step) in
       {horse; step; board}
   let do_move state move = 
-    state.step <- state.step + 1;
-    state.horse <- move.dest;
-    Board.set state.board move.dest (Some state.step)
+    let step = state.step + 1 in {
+      step; 
+      horse = move.dest;
+      board = Board.set state.board move.dest (Some step)
+    }
 
-  let undo_move state move = 
-    state.step <- state.step - 1;
-    state.horse <- move.from;
-    Board.set state.board move.dest None
-  
   let board {board;_} = board
 
   let isValidTarget board target =
@@ -227,34 +223,32 @@ let solve ?(report_backtracking = fun _ -> ()) = (
           |> sort_moves state
           |> List.find_map (try_move state)
     and try_move state move = 
-      GameState.do_move state move;
+      let state = GameState.do_move state move in
       match solve state with
-      | None -> GameState.undo_move state move; None
+      | None -> None
       | Some solution -> Some solution
   in solve
 )
 
 let make_search_space ?(report_backtracking = fun _ -> ()) board_size =
-  let rec search_space state =
-    if GameState.isWinning state then
-      Searchspace.return (GameState.board state)
-    else 
-      match GameState.valid_moves state with
-      | [] -> (
-        report_backtracking state;
-        Searchspace.empty
-      ) 
-      | moves -> (moves 
-        |> sort_moves state   
-        |> List.map (try_move state)
-        |> Searchspace.alt  
-      )
+  let rec search_space state = Searchspace.defer (fun () ->
+      if GameState.isWinning state then
+        Searchspace.return (GameState.board state)
+      else 
+        match GameState.valid_moves state with
+        | [] -> (
+          report_backtracking state;
+          Searchspace.empty
+        ) 
+        | moves -> (moves 
+          |> sort_moves state   
+          |> List.map (try_move state)
+          |> Searchspace.alt  
+        )
+  )
   and try_move state move = 
-    Searchspace.withUndo (fun () -> 
-        GameState.do_move state move; 
-        search_space state
-      )
-      ~undo: (fun  () -> GameState.undo_move state move)
+    let state = GameState.do_move state move in 
+    search_space state
   in search_space (GameState.make board_size)
 
 let print_targetcount board = 

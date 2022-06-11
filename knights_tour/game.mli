@@ -37,7 +37,7 @@ module Board :
     val get : t -> Point.t -> int option
 
     (** [Board.set b {x;y} newContents] sets the contents of the board at a given coordinate.*)
-    val set : t -> Point.t -> int option -> unit
+    val set : t -> Point.t -> int option -> t
 
     (** Drays the board using the [graphics] library.*)
     val draw : t -> unit
@@ -75,11 +75,7 @@ module GameState :
     val board : t -> Board.t
 
     (** Update the game state by doing a given move. *)
-    val do_move : t -> move -> unit
-
-    (** Update the game state in reverse, i.e. undo a move. That 'do' and 'undo' are
-        paired in a 'LIFO' order.*)
-    val undo_move : t -> move -> unit
+    val do_move : t -> move -> t
 
     (** Decide whether the current state represents a winning / solved state. *)
     val isWinning : t -> bool
