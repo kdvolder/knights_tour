@@ -15,27 +15,6 @@ let print_solution i board =
   print_endline ((Int.to_string (i + 1)) ^ ":");
   print_endline (Board.to_string board)
 
-(* let report_progress kind puzzle =
-  print_endline ("Progress: " ^ kind);
-  print_endline ("Remaining pieces: " ^ (Puzzle.(puzzle.pieces) |> List.length |> Int.to_string));
-  print_endline (Board.to_string Puzzle.(puzzle.board));
-  print_endline "Press enter to continue...";
-  read_line () |> fun _ -> () *)
-
-(* let new_progress_reporter () =
-  let best = ref Int.max_int in
-  let steps = ref 0 in
-  fun kind Puzzle.{board;pieces} ->
-    steps := !steps + 1;
-    let pieces_left = List.length pieces in
-    if pieces_left < !best then begin
-      best := pieces_left;
-      print_endline ("Progress: " ^ kind);
-      print_endline ("Steps: " ^ Int.to_string !steps);
-      print_endline (Board.to_string board)
-    end *)
-
-
 type stats = {
   steps: int;
   pop_ends: int;
@@ -84,8 +63,6 @@ let stack_mon msg steps stack = stats := {
 }
 
 let () =
-  let bf = 1 in
-  Printf.printf "Breadth search with factor = %d\n%!" bf;
   Puzzle.solve ~report_progress:(new_graphical_progress_reporter puzzle) puzzle 
-  |> Searchspace.to_seq ~search:(Searchspace.breadth_search ~stack_mon bf)
+  |> Searchspace.to_seq ~search:(Searchspace.breadth_search ~stack_mon)
   |> Seq.iteri print_solution

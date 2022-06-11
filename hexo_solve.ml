@@ -116,5 +116,5 @@ let () =
   let bf = 1 in
   Printf.printf "Breadth search with factor = %d\n%!" bf;
   Puzzle.solve ~report_progress:(new_graphical_progress_reporter puzzle) puzzle 
-  |> Searchspace.to_seq ~search:(Searchspace.breadth_search ~stack_mon bf)
+  |> Searchspace.to_seq ~search:(Searchspace.breadth_search ~limit:bf ~stack_mon)
   |> Seq.iteri print_solution

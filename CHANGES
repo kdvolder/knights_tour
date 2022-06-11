@@ -1,5 +1,8 @@
 ## v0.0.3 (TBD)
 
+Convert 'limit' parameter in Searchspace.breadth_search to
+an optional, labeled argumented.
+
 Remove the 'withUndo' operator from Searchspace because it
 is hard to support properly and hard to use properly without
 introducing bugs in a searchspace definition (hard to contain

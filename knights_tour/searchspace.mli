@@ -81,14 +81,48 @@ type 'a search_fun = 'a t -> ('a * 'a t) option
     Otherwise it returns [None] *)
 val search : 'a search_fun
 
-(** Search in a breadth-first fashion. Note that a breadth-first search
-    has a tendency to explore more and more parts of a searchpace at the same time as it keeps on
-    expanding and exploring branches in parallet. This can have a tendency to requre 
-    exponentionally more and more memory. To avoid a virtualy unbounded blow up in memory usage,
-    a limit is put on the maximum number of simulataneously active paths. When this number is 
-    reached or exceeded then the search reverst to a depth-first search which has the effect
-    of exploring some branches in depth and this reducing the number of active branches.*)
-val breadth_search : int ->  ?stack_mon:(string -> int -> 'a t Treequence.t -> unit) -> 'a search_fun
+(** Search in a mixed breadth-first and depth first fashion. This search pattern strives 
+    to strike a compromise between doing a depth-first and a breadth-first search. 
+    
+    Depth-first searches have the drawback for a very large searchspace that they will 
+    tend to get stuck exploring very narrow 'subtree' of the entire space. This is determined
+    by choices made early on in the search process. These choices lead such large search spaces
+    that the search engine will never be able to backtrack out of them to explore other parts
+    of the space.
+    
+    A breadth-first search on the other hand will explore branches in parallel (it keeps 'active
+    branches in a queue and works on exploring each branch in turn a little bit, before moving
+    on to exploring another branch.
+
+    This has the advantage of exploring the search space more broadly instead of getting stuck
+    in a narrow subspace determined by early choices. However for very large spaces 
+    this will lead to an explosive growth in memory requirement (the queue grows
+    larger and larger in an exponential fashion as the search space branches out in an exponential
+    number of nodes in terms of the depth).
+
+    The [breadth_search] function strikes a compromise between these two extremes by using
+    a [Treequence] data structure to keep track of active branches. The [Treequence] can be used
+    as either a stack or a queue because it allows pushing and poping of elements on either
+    front or back. A compromise between branching out and exploring in depths is achieved by
+    dynamically switching between using the [Treequence] either as a stack 
+    or a queue. As the [Treequence] grows in size the ratio of operations using it as a stack vs
+    a queue is gradually increased. Thus as the number of actively explored branches increases the
+    tendency to explore in depth also increases; and the tendency to branch out decreases.
+      
+    Optional Parameters:
+
+    - [limit]: determines how aggressively the search space is breadth exploration will be
+               limited as the work queue grows in size. If set to 0 then there is no limit
+               and the work queue is always used as a queue. If set to [n], then the number
+               of [queue_ops / stack_ops] tends towards [n / active_branches]. The default 
+               [limit] value is [1].
+               
+    - [stack_mon]: a function that is called on every step of the search allowing a caller
+               to monitor progress and/or collect statistical data. 
+               The default is a function that does nothing.
+
+    *)
+val breadth_search : ?limit:int ->  ?stack_mon:(string -> int -> 'a t Treequence.t -> unit) -> 'a search_fun
 
 (** Converts a searchspace into a [Seq] of its solutions. The solutions are 
     produced incrementally as required. So it is fine to convert a searchspace 

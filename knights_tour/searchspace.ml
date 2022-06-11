@@ -76,7 +76,7 @@ let rec breadth_search_aux limit stackmon steps stack =
     | Lazy producer -> Treequence.push (producer ()) stack 
         |> breadth_search_aux limit stackmon !steps
   )
-let breadth_search limit ?(stack_mon=fun _ _ _ -> ()) space =
+let breadth_search ?(limit=1) ?(stack_mon=fun _ _ _ -> ()) space =
   breadth_search_aux limit stack_mon 0 (Treequence.singleton space) 
 
 let rec to_seq ?(search=search) space () =
@@ -206,7 +206,7 @@ let%expect_test "breadth_search" =
     let* num2 = int_range 1 5 in
     return (num1 , num2)
   )
-  |> to_seq ~search:(breadth_search limit)
+  |> to_seq ~search:(breadth_search ~limit)
   |> Seq.iter (fun (x, y) -> (Printf.printf "(%d, %d) " x y))
   ; Printf.printf("\n")
 )
