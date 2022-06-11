@@ -1,5 +1,17 @@
 ## v0.0.3 (TBD)
 
+Remove the 'withUndo' operator from Searchspace because it
+is hard to support properly and hard to use properly without
+introducing bugs in a searchspace definition (hard to contain
+side-effects).
+
+Add a 'breadth_first' searchspace exploration algorithm that
+gradually regresses back to dept-first search to limit memory
+usage.
+
+Add a human readable/editable texttual de/serialization format
+for specifying polymonio puzzles. 
+
 Add hexo_solve executable which solves an instance of Hexominos.
 
 Make graphical drawing of polyomino board more pleasing to the eye:
