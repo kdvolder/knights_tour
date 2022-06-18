@@ -11,7 +11,7 @@
 
 (package
  (name knights_tour)
- (synopsis "Solves the \"Knight's Tour\" and various \"Poyomino\" puzzles")
+ (synopsis "Solves the 'Knights Tour' and various 'Poyomino' puzzles")
  (description "See https://en.wikipedia.org/wiki/Knight%27s_tour or https://en.wikipedia.org/wiki/Polyomino")
  (depends 
   ("ocaml" (>= "4.14.0")) 
