@@ -1,6 +1,6 @@
 (lang dune 3.1)
 (name knights_tour)
-(version 0.0.3)
+(version 0.0.4)
 
 (generate_opam_files true)
 
@@ -11,7 +11,7 @@
 
 (package
  (name knights_tour)
- (synopsis "Solves the \"Knight's Tour\" and various \"Poyomino\" puzzles.")
+ (synopsis "Solves the \"Knight's Tour\" and various \"Poyomino\" puzzles")
  (description "See https://en.wikipedia.org/wiki/Knight%27s_tour or https://en.wikipedia.org/wiki/Polyomino")
  (depends 
   ("ocaml" (>= "4.14.0")) 
