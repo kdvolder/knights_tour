@@ -174,22 +174,6 @@ let%expect_test "defer (1 ++ 2)"  = defer (fun () -> (return 1 ++ return 2))
   |> Seq.iter (Printf.printf "%d; ")
   ;[%expect{| 1; 2; |}]
 
-let recursive generator = 
-  let rec self = Lazy (fun () -> generator self) 
-  in self
-
-let%expect_test "recursive" = 
-  let numbers = recursive (fun numbers ->  
-    return 1 ++
-    (numbers |-> ((+) 1)) 
-  ) in 
-  numbers |> to_seq 
-  |> Seq.take 5
-  |> Seq.iter (fun x ->
-    Printf.printf "%d; " x
-  ) 
-  ;[%expect{| 1; 2; 3; 4; 5; |}]
-
 let%expect_test "no_dup" =
   (
     let* num1 = int_range 1 5 in
