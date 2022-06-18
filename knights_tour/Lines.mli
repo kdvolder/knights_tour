@@ -14,6 +14,10 @@ val of_channel : in_channel -> t
 (** Split string into lines *)
 val of_string : string -> t
 
+(** A ['a loarder] converts input into a value of type 'a. It is given the first line of
+input as its first argument, and any additional lines can be read from the second parameter
+as needed. (This mechanic allows a one line lookahead for making decisions about how to
+parse data.*)
 type 'a loader = string -> t -> 'a
 
 (** [load_list terminator item_loader] produces a line-based loader which
