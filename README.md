@@ -36,9 +36,4 @@ a general purpose 'searchspace solver'. This is included as a library
 that might potentially be of use outside of this project.
 
 The generated api docs are [here](https://kdvolder.github.io/knights_tour/knights_tour/index.html). 
-The most interesting part of this library is the [SearchSpace](https://kdvolder.github.io/knights_tour/knights_tour/Knights_tour/Searchspace/index.html) 
-Module. The rest of the code isn't really as useful or re-usable and has almost no documentation.
-
-However the code that creates a 'searchspace' to solve the puzzle is [here](https://github.com/kdvolder/knights_tour/v0.0.1/master/knights_tour/game.ml#L237)
-and may make for a good example on how it is intended to be used.
-
+The most interesting part of this library is the [SearchSpace](https://kdvolder.github.io/knights_tour/knights_tour/Searchspace/index.html). 
