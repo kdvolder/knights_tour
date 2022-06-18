@@ -1,3 +1,9 @@
+## v0.0.4 (2022-06-18)
+
+Moved 'Searchspace' module and some of its 'supporting' code
+(I.e. `Treequence`) into a separate library 'knights_tour.searchspace'.
+This makes re-using `Searchspace` outside this project, more convient.
+
 ## v0.0.3 (2022-06-11)
 
 Add some randomization to the Hexo puzzle solver to make it more

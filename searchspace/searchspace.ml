@@ -1,3 +1,5 @@
+module Treequence = Treequence
+
 type 'a t = 
   | Result of 'a
   | Fork of 'a t Treequence.t

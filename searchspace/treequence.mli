@@ -1,7 +1,4 @@
-(**
- A Treequence is data structure that represents a finite, ordered sequence
- of elements. I.e it is much like a list. 
- *)
+(** A ['a t] is a Treequence containing elements of type ['a].*)
 type 'a t
 
 (** An empty Treequence, contains no elements. *)

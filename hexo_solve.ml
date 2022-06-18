@@ -1,5 +1,6 @@
-open Knights_tour
 open Pentominos
+
+module Treequence = Searchspace.Treequence
 
 (* let puzzle = Puzzle.{
   board = Board.of_string "

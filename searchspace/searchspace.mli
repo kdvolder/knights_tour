@@ -148,3 +148,11 @@ val nat_pairs : (int * int) t
     it creates a Set data structure to keep track of all previously encountered elements
     in order to detect any duplicates. *)
 val no_dup : ('a -> 'a -> int) -> 'a t -> 'a t
+
+(**
+ A [Treequence] is 'pure/functional' data structure that represents a finite, 
+ ordered sequence of elements. I.e it is much like a list. Unlike a typical list 
+ implementation it supports efficient pushing and popping on both the front and back. 
+ Thus it can be used interchangeably as a Stack or a Queue without much of a performance
+ penalty. *)
+module Treequence = Treequence

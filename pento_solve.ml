@@ -1,4 +1,3 @@
-open Knights_tour
 open Pentominos
 
 (* let puzzle = Puzzle.classic_no_symmetric_solutions *)

@@ -1,7 +1,6 @@
 (** Executable that Lloads puzzle problem from a 'polymino-puzzle.txt' file in the current directory. 
     Then starts solving it*)
 
-open Knights_tour
 open Pentominos
 
 (* TODO: we smuch of this code is just copied from 'hexo_solve' we should try to modularize this better. *)
@@ -58,7 +57,7 @@ let new_graphical_progress_reporter puzzle =
 
 let stack_mon msg steps stack = stats := {
   steps; 
-  stack_size=Treequence.size stack;
+  stack_size=Searchspace.Treequence.size stack;
   pop_ends = if msg="pop_end" then !stats.pop_ends+1 else !stats.pop_ends  
 }
 
