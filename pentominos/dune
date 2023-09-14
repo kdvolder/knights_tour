@@ -1,7 +1,7 @@
-(library 
+(library
   (name pentominos)
   (public_name knights_tour.pentominos)
-  (libraries graphics knights_tour)
+  (libraries base graphics knights_tour ppx_expect.common ppx_expect.config ppx_expect.config_types searchspace)
   (inline_tests)
   (preprocess (pps ppx_inline_test ppx_expect))
 )
