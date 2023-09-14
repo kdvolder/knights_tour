@@ -25,10 +25,10 @@ let push_end x xs = append xs (singleton x)
 
 let rec pop = function
 | Empty -> None
-| Single x -> Some (x, Empty) 
+| Single x -> Some (x, Empty)
 | Append {lt=Empty;rt;_} -> pop rt
 | Append {lt=Single x; rt; _} -> Some(x,rt)
-| Append {lt=Append{lt=a;rt=b;_};rt=c; _} -> 
+| Append {lt=Append{lt=a;rt=b;_};rt=c; _} ->
     pop (append a (append b c))
 
 let rec pop_end = function
@@ -40,26 +40,26 @@ let rec pop_end = function
     pop_end (append (append a b) c)
 
 let rec map f = function
-| Empty -> Empty 
+| Empty -> Empty
 | Single x -> Single (f x)
-| Append {sz; lt; rt} -> Append {sz; lt=map f lt; rt=map f rt}   
+| Append {sz; lt; rt} -> Append {sz; lt=map f lt; rt=map f rt}
 
 let rec to_string str = function
 | Empty -> "nil"
 | Single x -> str x
-| Append{lt;rt;_} -> "[" ^ to_string str lt ^ " " ^ to_string str rt ^ "]" 
+| Append{lt;rt;_} -> "[" ^ to_string str lt ^ " " ^ to_string str rt ^ "]"
 
 let%expect_test "pushes and pops" =
-  let stack = empty 
+  let stack = empty
     |> push 1
     |> push 2
-    |> push 3 
+    |> push 3
     |> push 4
     |> push 5 in
   Printf.printf "stack: %s\n" (to_string Int.to_string stack);
   let rec pop_all stack =
-  pop stack |> (function 
-  | Some (top, rest) -> 
+  pop stack |> (function
+  | Some (top, rest) ->
       Printf.printf "Popped: %d Rest: %s\n" top (to_string Int.to_string rest);
       pop_all rest
   | None -> Printf.printf "===end==="
@@ -75,16 +75,16 @@ let%expect_test "pushes and pops" =
     ===end=== |}]
 
 let%expect_test "use as a queue" =
-  let stack = empty 
+  let stack = empty
     |> push 1
     |> push 2
-    |> push 3 
-    |> push 4 
+    |> push 3
+    |> push 4
     |> push 5 in
   Printf.printf "stack: %s\n" (to_string Int.to_string stack);
   let rec pop_all stack =
-  pop_end stack |> (function 
-  | Some (top, rest) -> 
+  pop_end stack |> (function
+  | Some (top, rest) ->
       Printf.printf "Popped: %d Rest: %s\n" top (to_string Int.to_string rest);
       pop_all rest
   | None -> Printf.printf "===end==="

@@ -1,7 +1,6 @@
-(library 
-  (name knights_tour)
+(library
   (public_name knights_tour)
-  (libraries graphics searchspace)
+  (libraries base ppx_expect.common ppx_expect.config ppx_expect.config_types graphics searchspace)
   (inline_tests)
   (preprocess (pps ppx_inline_test ppx_expect))
 )

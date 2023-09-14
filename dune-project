@@ -3,6 +3,7 @@
 (version 0.0.5)
 
 (generate_opam_files true)
+(implicit_transitive_deps false)
 
 (source (github kdvolder/knights_tour))
 (license MIT)
@@ -13,6 +14,6 @@
  (name knights_tour)
  (synopsis "Solves the 'Knights Tour' and various 'Poyomino' puzzles")
  (description "See https://en.wikipedia.org/wiki/Knight%27s_tour or https://en.wikipedia.org/wiki/Polyomino")
- (depends 
-  ("ocaml" (>= "4.14.0")) 
+ (depends
+  ("ocaml" (>= "4.14.0"))
   "graphics" "stdio" "ppx_inline_test" "ppx_expect"))
