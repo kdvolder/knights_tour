@@ -55,6 +55,17 @@ let rec search = function
 
 type 'a search_fun = 'a t -> ('a * 'a t) option
 
+(* let memratio limit = 
+  let throttle = 1000 in
+  let count = ref throttle in
+  let memfree = Memfree.memratio () in
+  fun () -> begin
+    count := !count - 1;
+    if !count <= 0 then begin
+
+    end
+  end *)
+
 let rec breadth_search_aux limit stackmon steps stack =
   let steps = ref (steps + 1) in
   let pop worklist =
