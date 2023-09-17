@@ -1,4 +1,4 @@
 (executables
  (names        solve_file random_hexo_puzzle pento_solve hexo_solve solve        play        benchmark)
- (public_names solve_file random_hexo_puzzle pento_solve hexo_solve knight_solve knight_play -)
+ (public_names solve_file random_hexo_puzzle pento_solve hexo_solve knight_solve knight_play -        )
  (libraries stdio graphics unix knights_tour pentominos))

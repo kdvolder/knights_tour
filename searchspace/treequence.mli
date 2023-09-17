@@ -1,5 +1,5 @@
 (** A ['a t] is a Treequence containing elements of type ['a].*)
-type 'a t
+type 'a t 
 
 (** An empty Treequence, contains no elements. *)
 val empty : 'a t
@@ -35,3 +35,6 @@ val append : 'a t -> 'a t -> 'a t
 (** Converts Treequence into a string revealing its internal structure. Useful
     for debugging and testing. *)
 val to_string : ('a -> string) -> 'a t -> string
+
+module Persistable :
+  functor (A : Persist.Persistable) -> Persist.Persistable with type t = A.t t

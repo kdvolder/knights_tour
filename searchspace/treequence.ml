@@ -98,3 +98,50 @@ let%expect_test "use as a queue" =
     Popped: 4 Rest: 5
     Popped: 5 Rest: nil
     ===end=== |}]
+  
+module Persistable (A : Persist.Persistable) = struct 
+  type tt = A.t t
+  type t = tt
+  let rec save out = function 
+  | Empty -> 
+      output_char out '0'
+  | Single v -> 
+      output_char out '1'; 
+      A.save out v
+  | Append {lt;rt;_} -> 
+      output_char out '2';
+      save out lt;
+      save out rt
+  let rec load inp =
+    let kind = input_char inp in
+    match kind with
+    | '0' -> Empty
+    | '1' -> Single (A.load inp)
+    | '2' -> 
+        let lt = load inp in
+        let rt = load inp in
+        append lt rt
+    | c -> raise (Failure (Printf.sprintf "Unexpected intput: '%c'" c))
+end
+
+module IntTreequence = Persistable(struct
+  type t = int
+  let save = output_binary_int
+  let load = input_binary_int
+end)
+
+let%expect_test "save and load" = 
+  let stack : int t = empty |> push 1 |> push 2 |> push 3 |> push 4 |> push 5 in
+  let file = Filename.temp_file "test-save" ".bin" in
+  Printf.printf "org   : %s\n" (to_string Int.to_string stack);
+  Out_channel.with_open_bin file (fun out -> 
+    IntTreequence.save out stack
+  );
+  let stack = In_channel.with_open_bin file (fun inp ->
+    IntTreequence.load inp
+  ) in
+  Printf.printf "loaded: %s\n" (to_string Int.to_string stack);
+  ;[%expect{|
+    org   : [5 [4 [3 [2 1]]]]
+    loaded: [5 [4 [3 [2 1]]]] |}]
+

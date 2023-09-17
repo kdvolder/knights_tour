@@ -17,7 +17,7 @@ type stats = {
   pop_ends: int;
   stack_size: int;
   solutions: int;
-}    
+}
 let stats = ref {steps=0;pop_ends=0;stack_size=0; solutions=0}
 
 let print_solution i board = 
@@ -75,6 +75,27 @@ let new_graphical_progress_reporter csv_progress puzzle =
     )
   )
 
+let simple_progress_reporter csv_progress =  
+  let best = ref Int.max_int in
+  let steps = ref 0 in
+  fun _ Puzzle.{board;pieces} -> begin
+    steps := !steps + 1;
+    csv_progress (!steps, !stats);
+    let pieces_left = List.length pieces in
+    if pieces_left <= !best || !steps mod 100_000 = 0 then begin
+      rate_limit (pieces_left=0) (fun () ->
+        best := pieces_left;
+        let out = open_out "snapshot.txt" in
+        Printf.fprintf out "%s\n" (Board.to_string board);
+        Printf.fprintf out "%d / %d / %d\n" !stats.steps !stats.stack_size !stats.pop_ends; 
+        if !stats.pop_ends>0 then (
+          Printf.fprintf out "%.4f" ((Float.of_int !stats.stack_size)/.(Float.of_int (!stats.pop_ends)))
+        );
+        close_out out
+      )  
+    end
+  end
+
 let stack_mon msg steps stack = stats := {
   !stats with
   steps; 
@@ -82,8 +103,24 @@ let stack_mon msg steps stack = stats := {
   pop_ends = if msg="pop_end" then !stats.pop_ends+1 else !stats.pop_ends  
 }
 
+let useGraphics = ref false
+
+let arg_specs = [
+  ("--graphics", Arg.Set useGraphics, "Show progress in a Graphics window")
+]
+
+let usage_msg = "solve_file [--graphics]"
+  
 let () =
+  Arg.parse arg_specs (fun _ -> ()) usage_msg;
+  let args = Sys.argv in
+  let useGraphics = Array.length args > 1 && args.(1) = "--graphics" in
   let csv_progress = new_csv_progress_reporter stats_file 10_000 in
-  Puzzle.solve ~report_progress:(new_graphical_progress_reporter csv_progress puzzle) puzzle 
+  let progress_reporter = (if useGraphics 
+      then new_graphical_progress_reporter csv_progress puzzle
+      else simple_progress_reporter csv_progress
+  ) in
+  Printf.printf "Use graphics? %b\n%!" useGraphics;
+  Puzzle.solve ~report_progress:progress_reporter puzzle 
   |> Searchspace.to_seq ~search:(Searchspace.breadth_search ~stack_mon)
   |> Seq.iteri print_solution
