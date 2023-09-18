@@ -110,6 +110,8 @@ let arg_specs = [
 ]
 
 let usage_msg = "solve_file [--graphics]"
+
+let memory_limit = Searchspace.limit_on_low_memory ~max_memory_ratio:0.8
   
 let () =
   Arg.parse arg_specs (fun _ -> ()) usage_msg;
@@ -122,5 +124,5 @@ let () =
   ) in
   Printf.printf "Use graphics? %b\n%!" useGraphics;
   Puzzle.solve ~report_progress:progress_reporter puzzle 
-  |> Searchspace.to_seq ~search:(Searchspace.breadth_search ~stack_mon)
+  |> Searchspace.to_seq ~search:(Searchspace.breadth_search ~limit:memory_limit ~stack_mon)
   |> Seq.iteri print_solution

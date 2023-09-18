@@ -122,7 +122,9 @@ val search : 'a search_fun
                The default is a function that does nothing.
 
     *)
-val breadth_search : ?limit:int ->  ?stack_mon:(string -> int -> 'a t Treequence.t -> unit) -> 'a search_fun
+val breadth_search : ?limit:(unit -> float) ->  ?stack_mon:(string -> int -> 'a t Treequence.t -> unit) -> 'a search_fun
+
+val limit_on_low_memory : max_memory_ratio:float -> unit -> float
 
 (** Converts a searchspace into a [Seq] of its solutions. The solutions are 
     produced incrementally as required. So it is fine to convert a searchspace 

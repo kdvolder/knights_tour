@@ -55,21 +55,37 @@ let rec search = function
 
 type 'a search_fun = 'a t -> ('a * 'a t) option
 
-(* let memratio limit = 
-  let throttle = 1000 in
-  let count = ref throttle in
-  let memfree = Memfree.memratio () in
+let cached_for ~iterations getter =
+  let counter = ref 0 in
+  let cache = ref (getter ()) in
   fun () -> begin
-    count := !count - 1;
-    if !count <= 0 then begin
+    counter := !counter + 1;
+    if !counter >= iterations then begin
+      counter := 0;
+      cache := getter ()
+    end;
+    !cache
+  end
 
-    end
-  end *)
+let memfree = cached_for ~iterations:200 Memfree.mem_free_ratio 
+
+(** [scale_to_inifinity x] goes from 0 to infinity as x goes from 0 to 1 *)
+let scale_to_inifinity x =
+  let divider = 1.0 -. x in
+  if divider <= 0.0 then
+    Float.infinity
+  else
+    x /. divider
+
+let limit_on_low_memory ~max_memory_ratio () = 
+  let free_ratio = memfree () in
+  let used_ratio = 1.0 -. free_ratio in
+  scale_to_inifinity (used_ratio /. max_memory_ratio)
 
 let rec breadth_search_aux limit stackmon steps stack =
   let steps = ref (steps + 1) in
   let pop worklist =
-    if !steps > Treequence.size worklist * limit then (
+    if Float.of_int !steps > Float.of_int (Treequence.size worklist) *. limit () then (
       (* broaden search by choosing the oldest choice point to explore further *)
       stackmon "pop_end" !steps worklist;
       steps := 0;
@@ -89,7 +105,9 @@ let rec breadth_search_aux limit stackmon steps stack =
     | Lazy producer -> Treequence.push (producer ()) stack 
         |> breadth_search_aux limit stackmon !steps
   )
-let breadth_search ?(limit=1) ?(stack_mon=fun _ _ _ -> ()) space =
+let default_limit () = 1.0
+
+let breadth_search ?(limit=default_limit) ?(stack_mon=fun _ _ _ -> ()) space =
   breadth_search_aux limit stack_mon 0 (Treequence.singleton space) 
 
 let rec to_seq ?(search=search) space () =
@@ -197,7 +215,9 @@ let%expect_test "no_dup" =
   ; [%expect{| 1; 2; 3; 4; 5; 6; 8; 9; 10; 12; 15; 16; 20; 25; |}]
 
 let%expect_test "breadth_search" =
-[4; 10] |> List.iter (fun limit ->
+[4; 10] 
+|> List.map (fun limit () -> Float.of_int limit)
+|> List.iter (fun limit ->
   (
     let* num1 = int_range 1 5 in
     let* num2 = int_range 1 5 in
