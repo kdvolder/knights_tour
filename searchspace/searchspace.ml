@@ -67,7 +67,7 @@ let cached_for ~iterations getter =
     !cache
   end
 
-let memfree = cached_for ~iterations:200 Memfree.mem_free_ratio 
+let memfree = cached_for ~iterations:10000 Memfree.mem_free_ratio 
 
 (** [scale_to_inifinity x] goes from 0 to infinity as x goes from 0 to 1 *)
 let scale_to_inifinity x =
@@ -75,7 +75,7 @@ let scale_to_inifinity x =
   if divider <= 0.0 then
     Float.infinity
   else
-    x /. divider
+    (x /. divider)
 
 let limit_on_low_memory ~max_memory_ratio () = 
   let free_ratio = memfree () in
@@ -85,7 +85,8 @@ let limit_on_low_memory ~max_memory_ratio () =
 let rec breadth_search_aux limit stackmon steps stack =
   let steps = ref (steps + 1) in
   let pop worklist =
-    if Float.of_int !steps > Float.of_int (Treequence.size worklist) *. limit () then (
+    let lmt = Float.of_int (Treequence.size worklist) *. limit () in
+    if Float.of_int !steps > lmt then (
       (* broaden search by choosing the oldest choice point to explore further *)
       stackmon "pop_end" !steps worklist;
       steps := 0;

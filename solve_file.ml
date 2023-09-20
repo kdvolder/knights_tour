@@ -87,7 +87,7 @@ let simple_progress_reporter csv_progress =
         best := pieces_left;
         let out = open_out "snapshot.txt" in
         Printf.fprintf out "%s\n" (Board.to_string board);
-        Printf.fprintf out "%d / %d / %d\n" !stats.steps !stats.stack_size !stats.pop_ends; 
+        Printf.fprintf out "%d: %d / %d / %d\n" !steps !stats.steps !stats.stack_size !stats.pop_ends; 
         if !stats.pop_ends>0 then (
           Printf.fprintf out "%.4f" ((Float.of_int !stats.stack_size)/.(Float.of_int (!stats.pop_ends)))
         );
@@ -111,7 +111,7 @@ let arg_specs = [
 
 let usage_msg = "solve_file [--graphics]"
 
-let memory_limit = Searchspace.limit_on_low_memory ~max_memory_ratio:0.8
+let memory_limit = Searchspace.limit_on_low_memory ~max_memory_ratio:0.95
   
 let () =
   Arg.parse arg_specs (fun _ -> ()) usage_msg;
