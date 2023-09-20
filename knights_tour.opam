@@ -16,7 +16,6 @@ depends: [
   "stdio"
   "ppx_inline_test"
   "ppx_expect"
-  "memfree"
   "odoc" {with-doc}
 ]
 build: [
