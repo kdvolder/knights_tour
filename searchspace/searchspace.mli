@@ -124,6 +124,16 @@ val search : 'a search_fun
     *)
 val breadth_search : ?limit:(unit -> float) ->  ?stack_mon:(string -> int -> 'a t Treequence.t -> unit) -> 'a search_fun
 
+(** [limit_on_low_memory max_ratio] produces a procedure suitable you can pass as a [limit]
+    argument to [breadth_search]. 
+    
+    When called it computes the current ration of [memory_used/memory_available] in 
+    the host OS (note: only Linux is supported). As this ratio approaches 
+    the [max_memory_ratio], the limit becomes ever more aggressive at limiting 
+    'breadth exploration' to curb additional memory consumption.
+
+    As the max_memory usage is reached or exceeded the search becomes a pure 'depth_first'
+    search until more memory is again available. *)
 val limit_on_low_memory : max_memory_ratio:float -> unit -> float
 
 (** Converts a searchspace into a [Seq] of its solutions. The solutions are 
