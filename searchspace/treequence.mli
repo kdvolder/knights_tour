@@ -32,6 +32,11 @@ val pop_end : 'a t -> ('a * 'a t) option
     followed by all elements of [s2]. *)
 val append : 'a t -> 'a t -> 'a t
 
+(** [of_list elements] Creates a [Treequence] from the elements of the list. The front
+       of the list will become the front ot the [Treequence]. The first element you [pop]
+       from the [Treequence] will be the first element in the list.*)
+val of_list : 'a list -> 'a t
+
 (** Converts Treequence into a string revealing its internal structure. Useful
     for debugging and testing. *)
 val to_string : ('a -> string) -> 'a t -> string

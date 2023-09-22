@@ -145,3 +145,39 @@ let%expect_test "save and load" =
     org   : [5 [4 [3 [2 1]]]]
     loaded: [5 [4 [3 [2 1]]]] |}]
 
+let rec of_list = function
+    [] -> empty
+  | x::xs -> of_list xs |> push x
+
+let%expect_test "of_list" =
+  let it = of_list [1; 2; 3; 4; 5] in
+  Printf.printf "%s\n" (to_string Int.to_string it)
+  ;[%expect{| [1 [2 [3 [4 5]]]] |}]
+
+let pop_and_drop op stack =
+  op stack |> Option.get |> fun (_,s) -> s
+
+let%expect_test "alternating stack and queue" =
+  let it = ref (of_list [1; 2; 3; 4; 5]) in
+  for i = 10 to 15 do
+    it := !it |> pop_and_drop pop;
+    it := !it |> push i;
+    Printf.printf "pop: %s\n" (to_string Int.to_string !it);
+
+    it := !it |> pop_and_drop pop_end;
+    it := !it |> push_end i;
+    Printf.printf "pop: %s\n" (to_string Int.to_string !it)
+  done
+  ;[%expect{|
+    pop: [10 [2 [3 [4 5]]]]
+    pop: [[[[10 2] 3] 4] 10]
+    pop: [11 [2 [3 [4 10]]]]
+    pop: [[[[11 2] 3] 4] 11]
+    pop: [12 [2 [3 [4 11]]]]
+    pop: [[[[12 2] 3] 4] 12]
+    pop: [13 [2 [3 [4 12]]]]
+    pop: [[[[13 2] 3] 4] 13]
+    pop: [14 [2 [3 [4 13]]]]
+    pop: [[[[14 2] 3] 4] 14]
+    pop: [15 [2 [3 [4 14]]]]
+    pop: [[[[15 2] 3] 4] 15] |}]
