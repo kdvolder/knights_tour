@@ -161,6 +161,11 @@ val nat_pairs : (int * int) t
     in order to detect any duplicates. *)
 val no_dup : ('a -> 'a -> int) -> 'a t -> 'a t
 
+module Dlist : sig 
+    module type S = Dlist_itf.S
+    include module type of Dlist
+end
+
 (**
  A [Treequence] is 'pure/functional' data structure that represents a finite, 
  ordered sequence of elements. I.e it is much like a list. Unlike a typical list 

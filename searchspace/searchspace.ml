@@ -1,4 +1,8 @@
 module Treequence = Treequence
+module Dlist = struct 
+  module type S = Dlist_itf.S
+  include Dlist
+end
 
 type 'a t = 
   | Result of 'a
