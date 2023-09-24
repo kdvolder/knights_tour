@@ -3,8 +3,6 @@
 
 open Pentominos
 
-module Treequence = Searchspace__.Treequence
-
 (* TODO: we smuch of this code is just copied from 'hexo_solve' we should try to modularize this better. *)
 
 let load_file path =
@@ -101,7 +99,7 @@ let simple_progress_reporter csv_progress =
 let stack_mon msg steps stack = stats := {
   !stats with
   steps; 
-  stack_size=Treequence.size stack;
+  stack_size=Searchspace.Treequence.size stack;
   pop_ends = if msg="pop_end" then !stats.pop_ends+1 else !stats.pop_ends  
 }
 
