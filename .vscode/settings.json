@@ -1,5 +1,5 @@
 {
-    "editor.codeLens": true,
+    "editor.codeLens": true, 
     "ocaml.sandbox": {
         "kind": "opam",
         "switch": "${workspaceFolder:knights_tour}"

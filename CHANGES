@@ -1,3 +1,21 @@
+## v0.0.6 (TBD)
+
+Added a `--graphics` commandline option to `solve_file`. By default
+`solve_file` now only produces textual output suitable for running
+in a headless environment.
+
+Made `solve_file` aware of OS memory availability and adapt to it so
+it adjusts its 'breadth limit' dynamically based on it. (It will tend
+towards more depts searhching as amount of available memory shrinks).
+Thus we can avoid running out of memory on the host machine no
+matter how long we let the process run.
+
+Implemented an alternative to `Treequence`` called `Dlist``. The `Dlist``
+implements the exact same interface as `Treequence` but it may be
+more peformant when switching back and forth between using the `Dlist` 
+as a Queue or a Stack. To confirm this we should do some kind of 
+performance test (which has not been done yet).
+
 ## v0.0.5 (2023-09-13)
 
 Improved documentation and README and small tweaks here and there.
