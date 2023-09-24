@@ -1,6 +1,8 @@
 module type S = sig
 
-  (** A ['a t] is a Dlist containing elements of type ['a].*)
+  (** A ['a t] is a Dlist containing elements of type ['a]. A Dlist, short for double-ended
+      list, is a purely functional ordered list of elements that can be accessed both from
+      the front and the back. *)
   type 'a t 
   
   (** An empty Dlist, contains no elements. *)
