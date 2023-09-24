@@ -167,9 +167,10 @@ module Dlist : sig
 end
 
 (**
- A [Treequence] is 'pure/functional' data structure that represents a finite, 
- ordered sequence of elements. I.e it is much like a list. Unlike a typical list 
- implementation it supports efficient pushing and popping on both the front and back. 
- Thus it can be used interchangeably as a Stack or a Queue without much of a performance
- penalty. *)
+ A [Treequence] is an implementation `Dlist` which keeps its elements in a tree. 
+ Every operation that adds elements to Treequence is O(1). Operations that retrieve
+ or remove elements from it will restructure the tree to expose either the front
+ or back of the list for fast access. This allows for efficient accesses on both ends
+ but there is a cost to be paid when switching bwteen accessing from the 
+ front/back or the back. *)
 module Treequence = Treequence
