@@ -13,7 +13,7 @@ end
  or back of the list for fast access. This allows for efficient accesses on both ends
  but there is a cost to be paid when switching bwteen accessing from the 
  front/back or the back. *)
- module Treequence : Dlist.S
+module Treequence : Dlist.S
 
 (** A searchspace with solutions of a given type. For examle a type [int Searchspace.t]
     is a searchspace who's solutions are integers. It can be thought of a as lazy-computed
