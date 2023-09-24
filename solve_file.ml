@@ -3,6 +3,8 @@
 
 open Pentominos
 
+module Treequence = Searchspace__.Treequence
+
 (* TODO: we smuch of this code is just copied from 'hexo_solve' we should try to modularize this better. *)
 
 let load_file path =
@@ -99,7 +101,7 @@ let simple_progress_reporter csv_progress =
 let stack_mon msg steps stack = stats := {
   !stats with
   steps; 
-  stack_size=Searchspace.Treequence.size stack;
+  stack_size=Treequence.size stack;
   pop_ends = if msg="pop_end" then !stats.pop_ends+1 else !stats.pop_ends  
 }
 
@@ -115,14 +117,12 @@ let memory_limit = Searchspace.limit_on_low_memory ~max_memory_ratio:0.95
   
 let () =
   Arg.parse arg_specs (fun _ -> ()) usage_msg;
-  let args = Sys.argv in
-  let useGraphics = Array.length args > 1 && args.(1) = "--graphics" in
   let csv_progress = new_csv_progress_reporter stats_file 10_000 in
-  let progress_reporter = (if useGraphics 
+  Printf.printf "Use graphics? %b\n%!" !useGraphics;
+  let progress_reporter = (if !useGraphics 
       then new_graphical_progress_reporter csv_progress puzzle
       else simple_progress_reporter csv_progress
   ) in
-  Printf.printf "Use graphics? %b\n%!" useGraphics;
   Puzzle.solve ~report_progress:progress_reporter puzzle 
   |> Searchspace.to_seq ~search:(Searchspace.breadth_search ~limit:memory_limit ~stack_mon)
   |> Seq.iteri print_solution
