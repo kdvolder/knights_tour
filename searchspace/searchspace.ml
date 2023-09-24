@@ -8,7 +8,7 @@ type 'a t =
 let return x = Result x
 
 let alt2 x y = Fork Treequence.(
-  append (singleton x) (singleton y)
+  push x (singleton y)
 )
 
 let alt choices = Fork (List.fold_right Treequence.push choices Treequence.empty)
