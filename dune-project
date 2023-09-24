@@ -15,4 +15,6 @@
  (description "See https://en.wikipedia.org/wiki/Knight%27s_tour or https://en.wikipedia.org/wiki/Polyomino")
  (depends 
   ("ocaml" (>= "4.14.0")) 
-  "graphics" "stdio" "ppx_inline_test" "ppx_expect"))
+  "graphics" "stdio" "ppx_inline_test" "ppx_expect" 
+  ("odoc" :with-doc)
+  ))
