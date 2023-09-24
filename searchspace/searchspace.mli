@@ -1,3 +1,20 @@
+(** A Dlist, short for double-ended list, is a purely functional 
+   ordered list of elements that can be accessed both from the 
+   front and the back. *)
+module Dlist : sig 
+    module type S = Dlist_itf.S
+    include S
+end
+
+(**
+ A [Treequence] is an implementation `Dlist` which keeps its elements in a tree. 
+ Every operation that adds elements to Treequence is O(1). Operations that retrieve
+ or remove elements from it will restructure the tree to expose either the front
+ or back of the list for fast access. This allows for efficient accesses on both ends
+ but there is a cost to be paid when switching bwteen accessing from the 
+ front/back or the back. *)
+ module Treequence : Dlist.S
+
 (** A searchspace with solutions of a given type. For examle a type [int Searchspace.t]
     is a searchspace who's solutions are integers. It can be thought of a as lazy-computed
     collection of integers. The members of the collection can be discovered/produced incrementally 
@@ -160,17 +177,3 @@ val nat_pairs : (int * int) t
     it creates a Set data structure to keep track of all previously encountered elements
     in order to detect any duplicates. *)
 val no_dup : ('a -> 'a -> int) -> 'a t -> 'a t
-
-module Dlist : sig 
-    module type S = Dlist_itf.S
-    include module type of Dlist
-end
-
-(**
- A [Treequence] is an implementation `Dlist` which keeps its elements in a tree. 
- Every operation that adds elements to Treequence is O(1). Operations that retrieve
- or remove elements from it will restructure the tree to expose either the front
- or back of the list for fast access. This allows for efficient accesses on both ends
- but there is a cost to be paid when switching bwteen accessing from the 
- front/back or the back. *)
-module Treequence = Treequence
