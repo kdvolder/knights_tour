@@ -1,3 +1,5 @@
+module type S = Dlist_itf.S
+
 type 'a t = {front: 'a Clist.t; back: 'a Clist.t}
 
 let to_string str {back;front} = Clist.(

@@ -1,7 +1,7 @@
 (library 
   (name searchspace)
   (public_name knights_tour.searchspace)
-  (libraries)
+  (libraries collections)
   (inline_tests)
   (preprocess (pps ppx_inline_test ppx_expect))
 )

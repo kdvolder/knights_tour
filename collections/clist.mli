@@ -1,3 +1,6 @@
+(** A Clist is a 'counted' list. Essentially, its just a list with a counter
+    that tracks its number of elements. This makes it O(1) to get its size. *)
+
 type 'a t = int * 'a list
 val empty : 'a t
 val size : 'a t -> int

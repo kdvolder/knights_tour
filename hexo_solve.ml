@@ -1,6 +1,6 @@
 open Pentominos
+open Collections
 
-module Treequence = Searchspace.Treequence
 
 (* let puzzle = Puzzle.{
   board = Board.of_string "
