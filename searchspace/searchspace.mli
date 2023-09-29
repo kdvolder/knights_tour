@@ -1,4 +1,4 @@
-open Collections
+module StaQue : Collections.Dlist_itf.S
 
 (** A searchspace with solutions of a given type. For examle a type [int Searchspace.t]
     is a searchspace who's solutions are integers. It can be thought of a as lazy-computed
@@ -124,7 +124,7 @@ val search : 'a search_fun
                The default is a function that does nothing.
 
     *)
-val breadth_search : ?limit:(unit -> float) ->  ?stack_mon:(string -> int -> 'a t Treequence.t -> unit) -> 'a search_fun
+val breadth_search : ?limit:(unit -> float) ->  ?stack_mon:(string -> int -> 'a t StaQue.t -> unit) -> 'a search_fun
 
 (** [limit_on_low_memory max_ratio] produces a procedure suitable you can pass as a [limit]
     argument to [breadth_search]. 

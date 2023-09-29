@@ -1,5 +1,6 @@
 open Pentominos
-open Collections
+module StaQue = Searchspace.StaQue
+
 
 
 (* let puzzle = Puzzle.{
@@ -109,7 +110,7 @@ let new_graphical_progress_reporter puzzle =
 
 let stack_mon msg steps stack = stats := {
   steps; 
-  stack_size=Treequence.size stack;
+  stack_size=StaQue.size stack;
   pop_ends = if msg="pop_end" then !stats.pop_ends+1 else !stats.pop_ends  
 }
 

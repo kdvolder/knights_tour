@@ -1,24 +1,24 @@
-open Collections
+module StaQue = Collections.Treequence
 
 type 'a t = 
   | Result of 'a
-  | Fork of 'a t Treequence.t
+  | Fork of 'a t StaQue.t
   | Lazy of (unit -> 'a t)
 
 let return x = Result x
 
-let alt2 x y = Fork Treequence.(
+let alt2 x y = Fork StaQue.(
   push x (singleton y)
 )
 
-let alt choices = Fork (List.fold_right Treequence.push choices Treequence.empty)
+let alt choices = Fork (List.fold_right StaQue.push choices StaQue.empty)
 
-let empty = Fork Treequence.empty
+let empty = Fork StaQue.empty
 
 let rec bind a f = match a with
   | Result a -> Lazy (fun () -> (f a))
   | Fork choices -> Fork ( 
-    choices |> Treequence.map (fun choice -> bind choice f)
+    choices |> StaQue.map (fun choice -> bind choice f)
   )
   | Lazy l -> Lazy (fun () ->  bind (l ()) f)
 
@@ -44,7 +44,7 @@ let int_range lo hi = range lo ((>=) hi) ((+) 1)
 
 let rec search = function 
   | Result r -> Some (r, empty)
-  | Fork choices -> (match Treequence.pop choices with 
+  | Fork choices -> (match StaQue.pop choices with 
     | None -> None
     | Some (first, rest) -> (match search first with
       | None -> search (Fork rest)
@@ -85,31 +85,31 @@ let limit_on_low_memory ~max_memory_ratio () =
 let rec breadth_search_aux limit stackmon steps stack =
   let steps = ref (steps + 1) in
   let pop worklist =
-    let lmt = Float.of_int (Treequence.size worklist) *. limit () in
+    let lmt = Float.of_int (StaQue.size worklist) *. limit () in
     if Float.of_int !steps > lmt then (
       (* broaden search by choosing the oldest choice point to explore further *)
       stackmon "pop_end" !steps worklist;
       steps := 0;
-      Treequence.pop_end worklist
+      StaQue.pop_end worklist
     ) else ( 
       (* narrow search by choosing the newest choice point to explore further (which tends to
          follow a single 'track/path/subtree' of choices until it is 'exhausted' / reaches a conclusion) *)
         stackmon "pop" !steps worklist;
-        Treequence.pop worklist
+        StaQue.pop worklist
     ) in
   match pop stack with 
   | None -> None
   | Some (item, stack) -> (match item with
     | Result x -> Some (x, Fork stack)
-    | Fork choices -> Treequence.append choices stack 
+    | Fork choices -> StaQue.append choices stack 
         |> breadth_search_aux limit stackmon !steps
-    | Lazy producer -> Treequence.push (producer ()) stack 
+    | Lazy producer -> StaQue.push (producer ()) stack 
         |> breadth_search_aux limit stackmon !steps
   )
 let default_limit () = 1.0
 
 let breadth_search ?(limit=default_limit) ?(stack_mon=fun _ _ _ -> ()) space =
-  breadth_search_aux limit stack_mon 0 (Treequence.singleton space) 
+  breadth_search_aux limit stack_mon 0 (StaQue.singleton space) 
 
 let rec to_seq ?(search=search) space () =
   match search space with
