@@ -4,6 +4,11 @@ module type S = sig
       list, is a purely functional ordered list of elements that can be accessed both from
       the front and the back. *)
   type 'a t 
+
+  (** A name for the datatype, there are different implementation of
+      this interface, you can check this name to identify which implementation
+      you are using. *)
+  val name : string
   
   (** An empty Dlist, contains no elements. *)
   val empty : 'a t

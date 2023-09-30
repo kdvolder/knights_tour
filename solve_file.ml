@@ -12,7 +12,7 @@ let load_file path =
 
 let puzzle = load_file "polymino-puzzle.txt"
 
-let stats_file = "stats.csv"
+let stats_file = Format.sprintf "stats-%s.csv" StaQue.name
 
 type stats = {
   steps: int;
@@ -44,11 +44,14 @@ let new_csv_progress_reporter file interval =
   let out = Out_channel.open_text file 
     |> Format.formatter_of_out_channel 
   in
+  let start_time = Unix.gettimeofday () in
   function (total_steps, {steps; pop_ends; stack_size; solutions}) -> 
     if total_steps mod interval = 0 then begin
       let branch_factor = Float.of_int stack_size /. Float.of_int pop_ends in
       let solve_ratio = Float.of_int total_steps /. Float.of_int solutions in
-      Format.fprintf out "%d,%d,%d,%d,%f,%d,%f\n%!" total_steps steps pop_ends stack_size branch_factor solutions solve_ratio
+      let used_time = Unix.gettimeofday() -. start_time in
+      let steps_per_second = Float.of_int(total_steps) /. used_time in
+      Format.fprintf out "%d,%d,%d,%d,%f,%d,%f,%f\n%!" total_steps steps pop_ends stack_size branch_factor solutions solve_ratio steps_per_second
     end
 
 
@@ -87,7 +90,7 @@ let simple_progress_reporter csv_progress =
     if pieces_left <= !best || !steps mod 100_000 = 0 then begin
       rate_limit (pieces_left=0) (fun () ->
         best := pieces_left;
-        let out = open_out "snapshot.txt" in
+        let out = open_out (Format.sprintf "snapshot-%s.txt" StaQue.name) in
         Printf.fprintf out "%s\n" (Board.to_string board);
         Printf.fprintf out "%d: %d / %d / %d\n" !steps !stats.steps !stats.stack_size !stats.pop_ends; 
         if !stats.pop_ends>0 then (

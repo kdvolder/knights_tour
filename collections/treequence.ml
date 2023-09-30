@@ -1,3 +1,5 @@
+let name = "treequence"
+
 type 'a t =
 | Empty
 | Single of 'a
