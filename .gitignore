@@ -2,3 +2,5 @@ _build
 .github-token
 _opam
 saves/2023.*
+on_boot.log
+notes.txt

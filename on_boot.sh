@@ -7,5 +7,6 @@ eval $(opam env)
 current_time=$(date "+%Y.%m.%d-%H.%M.%S")
 mkdir saves/$current_time
 cd saves/$current_time
-random_hexo_puzzle
+#random_hexo_puzzle
+cp ../pinned/poly*puzzle.txt .
 solve_file > solutions.txt
