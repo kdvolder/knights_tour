@@ -183,3 +183,32 @@ let%expect_test "alternating stack and queue" =
     pop: [[[[14 2] 3] 4] 14]
     pop: [15 [2 [3 [4 14]]]]
     pop: [[[[15 2] 3] 4] 15] |}]
+
+let rec get i = function
+  | Empty -> invalid_arg "Index out of range"
+  | Single x -> if i==0 then x else invalid_arg "Index out of range"
+  | Append {sz;lt;rt} -> 
+      if i<0 || i>=sz then
+        invalid_arg "Index out of range"
+      else let lsz = size lt in
+        if i<lsz then
+          get i lt
+        else 
+          get (i-lsz) rt
+
+let%expect_test "get" =
+  let it = empty 
+    |> push 1 |> push 2 |> push 3 |> push 4
+    |> push_end 11 |> push_end 12 |> push_end 13 |> push_end 14 in
+  for i = 0 to (size it) - 1 do
+    Printf.printf "%d: %d\n" i (get i it)
+  done
+  ;[%expect{|
+    0: 4
+    1: 3
+    2: 2
+    3: 1
+    4: 11
+    5: 12
+    6: 13
+    7: 14 |}]

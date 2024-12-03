@@ -5,7 +5,7 @@ module type S = sig
       the front and the back. *)
   type 'a t 
 
-  (** A name for the datatype, there are different implementation of
+  (** A name for the datatype, there are different implementations of
       this interface, you can check this name to identify which implementation
       you are using. *)
   val name : string
@@ -49,5 +49,9 @@ module type S = sig
   (** Converts Dlist into a string revealing its internal structure. Useful
       for debugging and testing. *)
   val to_string : ('a -> string) -> 'a t -> string
+
+  (** [get i s] finds element at index i from the front. 
+      For example [get 0 s] is equivalent [pop s] *)
+  val get : int -> 'a t -> 'a
   
 end

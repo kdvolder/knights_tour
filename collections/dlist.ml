@@ -211,5 +211,30 @@ let%expect_test "singleton list" =
       is_empty = false
       size = 1
       to_string = [ |  99] |}]
+
+let get i ({front;back} as l) = 
+   if i < Clist.size front then
+      List.nth (Clist.to_list front) i
+   else let from_end = (size l) - i - 1 in (
+      if from_end < 0 then
+        invalid_arg "Index out of range"
+      else
+        List.nth (Clist.to_list back) from_end
+   )
   
-  
+let%expect_test "get" =
+    let it = empty 
+      |> push 1 |> push 2 |> push 3 |> push 4
+      |> push_end 11 |> push_end 12 |> push_end 13 |> push_end 14 in
+    for i = 0 to (size it) - 1 do
+      Printf.printf "%d: %d\n" i (get i it)
+    done
+    ;[%expect{|
+      0: 4
+      1: 3
+      2: 2
+      3: 1
+      4: 11
+      5: 12
+      6: 13
+      7: 14 |}]

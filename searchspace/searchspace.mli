@@ -1,7 +1,7 @@
 module StaQue : Collections.Dlist_itf.S
 
 (** A searchspace with solutions of a given type. For examle a type [int Searchspace.t]
-    is a searchspace who's solutions are integers. It can be thought of a as lazy-computed
+    is a searchspace who's solutions are integers. It can be thought of as a lazy-computed
     collection of integers. The members of the collection can be discovered/produced incrementally 
     by a search process.
     
@@ -10,7 +10,7 @@ module StaQue : Collections.Dlist_itf.S
     
     It is unspecified whether the solutions of a searchspace are cached or produced again upon
     every attempt to find them. The current implementation does not cache results ever. 
-    It is generally unsafe to do so in the presence of side-effects. Future/alternatie implementations
+    It is generally unsafe to do so in the presence of side-effects. Future implementations
     might try to cache results in some situations when it is deemed safe to do so. *)
 type 'a t
 
@@ -19,8 +19,7 @@ val return : 'a -> 'a t
 
 (** Monadic bind. This constructs a new searchspace by feeding the
     results of an existing searchspace as input to a subsequent 
-    searchprocess. 
-    *)
+    searchprocess. *)
 val bind : 'a t -> ('a -> 'b t) -> 'b t
 
 (** Operator syntax for [bind] *)
@@ -162,3 +161,19 @@ val nat_pairs : (int * int) t
     it creates a Set data structure to keep track of all previously encountered elements
     in order to detect any duplicates. *)
 val no_dup : ('a -> 'a -> int) -> 'a t -> 'a t
+
+(** a [decision] represent a choice that has been made at a decision point *)
+type decision = {
+    (** A number between [0] inclusive and [choices] exclusive, indicating which choice was made*)
+    chosen: int;
+    (** A number >= [2] indicating the number of available choices at a decision point. Each of the 
+       available choices can be indicate by a number from [0] upto and excluding [choices] *)
+    choices: int
+}
+
+(** A [rng] is a function that accepts a positive integer as an argument and returns a
+    random integer between 0 (inclusive) and that integer (exclusive)*)
+type rng = int -> int
+
+(** [random_walk] searchspace walks a random path in the search space. Every time *)
+val random_walk : rng -> 'a t -> decision List.t * 'a option
