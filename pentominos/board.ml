@@ -108,13 +108,12 @@ let put board points poly =
   ) points board.squares
   |> (fun squares -> {board with squares})  
 
-let to_string board =
-  let square_to_char = (function
+let square_to_char = function
   | Vacant -> '.'
   | Occupied p -> Polyomino.name p
   | Blocked -> '#'
-  ) in
 
+let to_string board =
   let size = board.size in
   let image = Buffer.create ((size.x+1)*(size.y+1)) in
   for y = 0 to size.y-1 do
@@ -331,4 +330,86 @@ let init_graphics board_sz =
   let draw_sz = draw_size in
   Graphics.open_graph (Printf.sprintf " %dx%d" (board_sz.x * draw_sz + 2 * margin) (board_sz.y * draw_sz + 2 * margin));
   Graphics.set_font "12x24";
+  ()
 
+open Collections.Persist
+
+let persistable (char2poly:(char -> Polyomino.t)) : (module Persistable with type t=t) =
+  let char_to_square = (function
+  | '.' -> Vacant
+  | '#' -> Blocked
+  | ch -> Occupied (char2poly ch)
+  ) in
+  let module PersistableBoard = struct 
+    type nonrec t = t
+    let save out board = (
+      let size = size board in
+      Point.save out size;
+      for x = 0 to size.x-1 do 
+        for y = 0 to size.y-1 do
+          let sq = get board {x;y} in
+          output_char out (square_to_char sq)
+        done
+      done
+    )
+    let load inp = (
+      let size = Point.load inp in
+      let squares = ref PointMap.empty in
+      for x = 0 to size.x-1 do 
+        for y = 0 to size.y-1 do
+          let ch = input_char inp in
+          let sq = char_to_square ch in
+          match sq with
+          | Blocked -> ()
+          | Vacant -> squares := PointMap.add {x;y} None !squares
+          | Occupied p -> squares := PointMap.add {x;y} (Some p) !squares
+        done
+      done;
+      {size; squares = !squares}
+    )
+  end in
+  (module PersistableBoard : Collections.Persist.Persistable with type t = t)
+
+let%expect_test "save and load a board" =
+  let pieces = Polyomino.of_order 3 in
+  let board = rectangle 5 4 in
+  let char2poly name =
+    List.find (fun candidate -> Polyomino.name candidate == name) pieces in
+  let module Persistable = (val persistable char2poly) in
+
+  List.iter (fun poly -> 
+    let placement = Polyomino.points poly in
+    let placed = put board placement poly in
+    Printf.printf "%s\n" (to_string placed);
+    let (fname, output) = Filename.open_temp_file "board" "dat" in
+    Persistable.save output placed;
+    close_out output;
+    let input = open_in_bin fname in
+    let loaded = Persistable.load input in
+    close_in input;
+    Printf.printf "%s\n" (to_string loaded);
+    Printf.printf "=====================\n"
+  ) pieces
+  ;[%expect{|
+    AAA..
+    .....
+    .....
+    .....
+
+    AAA..
+    .....
+    .....
+    .....
+
+    =====================
+    BB...
+    B....
+    .....
+    .....
+
+    BB...
+    B....
+    .....
+    .....
+
+    ===================== |}] 

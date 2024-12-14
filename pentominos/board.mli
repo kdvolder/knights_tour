@@ -21,6 +21,7 @@
 *)
 
 open Knights_tour
+open Collections.Persist
 
 type t
 
@@ -111,3 +112,5 @@ val to_string : t -> string
 
 (** Draw the board using the [graphics] library*)
 val draw : ?black_and_white:bool -> t -> unit
+
+val persistable : (char -> Polyomino.t) -> (module Persistable with type t = t)
