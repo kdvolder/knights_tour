@@ -1,0 +1,21 @@
+{
+  "name": "knights-tour-monitor",
+  "version": "1.0.0",
+  "description": "Web UI for monitoring polyomino puzzle solver progress",
+  "main": "server/dist/index.js",
+  "scripts": {
+    "dev": "npx concurrently \"npm run server:dev\" \"npm run client:dev\"",
+    "build": "npm run client:build && npm run server:build",
+    "server:dev": "cd server && npm run dev",
+    "server:build": "cd server && npm run build",
+    "client:dev": "cd client && npm start",
+    "client:build": "cd client && npm run build",
+    "start": "npm run server:start",
+    "server:start": "cd server && npm start"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "author": "",
+  "license": "ISC"
+}
