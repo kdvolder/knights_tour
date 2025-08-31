@@ -37,6 +37,7 @@ fi
 
 echo "✅ Deployment complete!"
 echo ""
-echo "🌐 Application running on: http://localhost:3001"
-echo "� To stop: Press Ctrl+C"
-echo "🔄 To restart: Run ./deploy.sh again"
+echo "🌐 Application running on: http://localhost:8080"
+echo "📺 View server console: screen -r knights-tour-server"
+echo "� Stop server: screen -S knights-tour-server -X quit"
+echo "📋 List sessions: screen -list"
