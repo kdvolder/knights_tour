@@ -1,0 +1,47 @@
+/* SnapshotBoard component styling */
+.snapshot-board-container {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
+}
+
+.snapshot-board-info {
+  background: white;
+  padding: 1rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  min-width: 250px;
+  text-align: left;
+}
+
+.snapshot-board-info h3 {
+  margin: 0 0 0.5rem 0;
+  color: #333;
+  font-size: 1rem;
+}
+
+.snapshot-board-stats {
+  font-family: monospace;
+  font-size: 0.85rem;
+  color: #666;
+  margin: 0.5rem 0;
+  line-height: 1.4;
+}
+
+.snapshot-board-metric {
+  font-weight: bold;
+  color: #007acc;
+  font-size: 0.9rem;
+}
+
+.snapshot-board {
+  border-radius: 8px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+  background: white;
+  padding: 1rem;
+}
+
+.loading-message {
+  color: #666;
+  font-style: italic;
+}

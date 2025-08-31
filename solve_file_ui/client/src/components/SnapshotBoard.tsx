@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import type { JSX } from 'react';
 import { Snapshot } from '../../../shared/types';
+import './SnapshotBoard.css';
 
 const CELL_SIZE = 32; // px
 
@@ -28,7 +29,7 @@ export const SnapshotBoard: React.FC = () => {
       .then(setSnapshot);
   }, []);
 
-  if (!snapshot) return <div>Loading board...</div>;
+  if (!snapshot) return <div className="loading-message">Loading board...</div>;
 
   const rows = snapshot.board;
   const width = rows[0]?.length || 0;
@@ -79,27 +80,41 @@ export const SnapshotBoard: React.FC = () => {
   }
 
   return (
-    <svg
-      width={width * CELL_SIZE}
-      height={height * CELL_SIZE}
-      style={{ border: '2px solid #333', background: '#eee' }}
-    >
-      {rows.map((row: string, y: number) =>
-        row.split('').map((ch: string, x: number) => (
-          <rect
-            key={x + '-' + y}
-            x={x * CELL_SIZE}
-            y={y * CELL_SIZE}
-            width={CELL_SIZE}
-            height={CELL_SIZE}
-            fill={getCellColor(ch)}
-            stroke="#444"
-            strokeWidth={1}
-          />
-        ))
-      )}
-      {/* Draw boundaries on top */}
-      {boundaries}
-    </svg>
+    <div className="snapshot-board-container">
+      <div className="snapshot-board">
+        <svg
+          width={width * CELL_SIZE}
+          height={height * CELL_SIZE}
+          style={{ border: '2px solid #333', background: '#eee' }}
+        >
+          {rows.map((row: string, y: number) =>
+            row.split('').map((ch: string, x: number) => (
+              <rect
+                key={x + '-' + y}
+                x={x * CELL_SIZE}
+                y={y * CELL_SIZE}
+                width={CELL_SIZE}
+                height={CELL_SIZE}
+                fill={getCellColor(ch)}
+                stroke="#444"
+                strokeWidth={1}
+              />
+            ))
+          )}
+          {/* Draw boundaries on top */}
+          {boundaries}
+        </svg>
+      </div>
+      
+      <div className="snapshot-board-info">
+        <h3>Solver Progress</h3>
+        <div className="snapshot-board-stats">{snapshot.stats}</div>
+        {snapshot.metric !== null && (
+          <div className="snapshot-board-metric">
+            Metric: {snapshot.metric.toFixed(4)}
+          </div>
+        )}
+      </div>
+    </div>
   );
 };
