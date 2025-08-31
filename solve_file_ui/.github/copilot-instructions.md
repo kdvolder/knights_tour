@@ -24,11 +24,8 @@
 - [x] Create and Run Task
 	<!-- Development servers running successfully on localhost:3000 and localhost:3001 -->
 
-- [ ] Launch the Project
-	<!--
-	Verify that all previous steps have been completed.
-	Prompt user for debug mode, launch only if confirmed.
-	 -->
+- [x] Launch the Project
+	<!-- Successfully launched polyomino solver monitor on localhost:8080 -->
 
 - [ ] Ensure Documentation is Complete
 	<!--

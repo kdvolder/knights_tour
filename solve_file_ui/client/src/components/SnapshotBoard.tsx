@@ -8,7 +8,7 @@ const CELL_SIZE = 32; // px
 // Simple color mapping for demo; can be improved to match OCaml logic
 const colorMap: Record<string, string> = {
   '#': '#222', // Blocked
-  '.': '#fff', // Vacant
+  '.': '#e8e8e8', // Vacant - more noticeable grey
   // Add more mappings for each piece/letter as needed
 };
 
@@ -96,8 +96,6 @@ export const SnapshotBoard: React.FC = () => {
                 width={CELL_SIZE}
                 height={CELL_SIZE}
                 fill={getCellColor(ch)}
-                stroke="#444"
-                strokeWidth={1}
               />
             ))
           )}
