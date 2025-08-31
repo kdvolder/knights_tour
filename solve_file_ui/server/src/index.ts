@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
-import { getSnapshot, startWatching, onSnapshotChange, offSnapshotChange } from './snapshot';
+import { getSnapshot, getProcessStats, startWatching, onSnapshotChange, offSnapshotChange } from './snapshot';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '8080', 10);
@@ -36,6 +36,27 @@ app.get('/api/stats', (req, res) => {
 
 app.get('/api/solutions', (req, res) => {
   res.json({ message: 'Solutions endpoint - to be implemented' });
+});
+
+// Process stats endpoint
+app.get('/api/process-stats', async (req, res) => {
+  try {
+    const processStats = await getProcessStats();
+    if (processStats) {
+      res.json(processStats);
+    } else {
+      res.json({ 
+        error: 'solve_file process not found',
+        message: 'Could not locate the solve_file process. Make sure the solver is running.'
+      });
+    }
+  } catch (error) {
+    console.error('Error getting process stats:', error);
+    res.status(500).json({ 
+      error: 'Failed to get process stats',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
 });
 
 // SSE endpoint for real-time snapshot updates

@@ -1,5 +1,6 @@
 import React from 'react';
 import type { JSX } from 'react';
+import './Board.css';
 
 const CELL_SIZE = 32; // px
 

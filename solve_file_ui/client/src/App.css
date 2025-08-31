@@ -34,3 +34,22 @@
   align-items: flex-start;
   background-color: #f5f5f5;
 }
+
+.content-container {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
+  max-width: 1200px;
+  width: 100%;
+}
+
+.progress-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.loading-message {
+  color: #666;
+  font-style: italic;
+}

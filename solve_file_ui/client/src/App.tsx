@@ -1,8 +1,76 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import './App.css';
-import { SnapshotMonitor } from './components/SnapshotMonitor';
+import { Board } from './components/Board';
+import { ProgressDisplay } from './components/ProgressDisplay';
+import { ProcessStats } from './components/ProcessStats';
+import { Snapshot, ProcessStats as ProcessStatsType } from '../../shared/types';
 
 function App() {
+  const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
+  const [processStats, setProcessStats] = useState<ProcessStatsType | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  // Fetch process stats
+  const fetchProcessStats = async () => {
+    try {
+      const response = await fetch('/api/process-stats');
+      if (response.ok) {
+        const data = await response.json();
+        // Check if we got actual process stats or an error message
+        if (data.error) {
+          console.log('Solver process not found:', data.message);
+          setProcessStats(null);
+        } else {
+          setProcessStats(data);
+        }
+      } else {
+        console.error('Failed to fetch process stats:', response.status);
+        setProcessStats(null);
+      }
+    } catch (error) {
+      console.error('Error fetching process stats:', error);
+      setProcessStats(null);
+    }
+  };
+
+  useEffect(() => {
+    console.log('Setting up SSE connection...');
+    
+    // Set up Server-Sent Events for real-time updates
+    const eventSource = new EventSource('/api/snapshotstream');
+    
+    eventSource.onopen = () => {
+      console.log('SSE connection opened');
+    };
+    
+    eventSource.onmessage = (event) => {
+      console.log('Received SSE message:', event.data);
+      try {
+        const newSnapshot = JSON.parse(event.data);
+        setSnapshot(newSnapshot);
+        setLastUpdated(new Date());
+      } catch (error) {
+        console.error('Error parsing snapshot data:', error);
+      }
+    };
+
+    eventSource.onerror = (error) => {
+      console.error('SSE connection error:', error);
+      console.log('SSE readyState:', eventSource.readyState);
+    };
+
+    // Fetch initial process stats and set up periodic updates
+    fetchProcessStats();
+    const processStatsInterval = setInterval(fetchProcessStats, 2000); // Update every 2 seconds
+
+    // Cleanup on unmount
+    return () => {
+      console.log('Closing SSE connection');
+      eventSource.close();
+      clearInterval(processStatsInterval);
+    };
+  }, []);
+
   return (
     <div className="App">
       <header className="App-header">
@@ -10,7 +78,22 @@ function App() {
         <p>Real-time monitoring of polyomino puzzle solver progress</p>
       </header>
       <main className="App-main">
-        <SnapshotMonitor />
+        {!snapshot ? (
+          <div className="loading-message">Loading board...</div>
+        ) : (
+          <div className="content-container">
+            <Board board={snapshot.board} />
+            <div className="progress-section">
+              <ProgressDisplay 
+                stats={snapshot.stats}
+                metric={snapshot.metric}
+                lastUpdated={lastUpdated}
+                csvStats={snapshot.csvStats}
+              />
+              <ProcessStats processStats={processStats} />
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

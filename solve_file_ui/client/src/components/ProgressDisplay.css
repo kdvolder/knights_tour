@@ -1,17 +1,4 @@
-/* SnapshotMonitor component styling */
-.snapshot-monitor-container {
-  display: flex;
-  gap: 1.5rem;
-  align-items: flex-start;
-}
-
-.board {
-  border-radius: 8px;
-  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
-  background: white;
-  padding: 1rem;
-}
-
+/* ProgressDisplay component styling */
 .progress-display {
   background: white;
   padding: 1rem;
@@ -56,9 +43,45 @@
   font-weight: bold;
   color: #007acc;
   font-size: 0.9rem;
+  margin-bottom: 1rem;
 }
 
-.loading-message {
+.parsed-stats {
+  margin: 1rem 0;
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.stat-label {
   color: #666;
-  font-style: italic;
+  font-weight: 500;
+}
+
+.stat-value {
+  color: #333;
+  font-family: monospace;
+  font-weight: bold;
+}
+
+.stat-value.highlight {
+  color: #007acc;
+  font-size: 1rem;
+}
+
+.csv-stats {
+  border-top: 1px solid #eee;
+  padding-top: 1rem;
+  margin-top: 1rem;
+}
+
+.csv-stats h4 {
+  margin: 0 0 0.5rem 0;
+  color: #333;
+  font-size: 0.9rem;
 }
