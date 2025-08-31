@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
+import { getSnapshot } from './snapshot';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '8080', 10);
@@ -9,10 +10,8 @@ const PORT = parseInt(process.env.PORT || '8080', 10);
 app.use(cors());
 app.use(express.json());
 
-// Serve static files from React build in production
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../../client/build')));
-}
+// Serve static files from React build
+app.use(express.static(path.join(__dirname, '../../client/build')));
 
 // Basic route
 app.get('/api/health', (req, res) => {
@@ -32,16 +31,23 @@ app.get('/api/solutions', (req, res) => {
   res.json({ message: 'Solutions endpoint - to be implemented' });
 });
 
-app.get('/api/snapshot', (req, res) => {
-  res.json({ message: 'Snapshot endpoint - to be implemented' });
+app.get('/api/snapshot', async (req, res) => {
+  try {
+    const snapshot = await getSnapshot();
+    res.json(snapshot);
+  } catch (error) {
+    console.error('Error reading snapshot:', error);
+    res.status(500).json({ 
+      error: 'Failed to read snapshot data',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
 });
 
-// Serve React app for all non-API routes in production
-if (process.env.NODE_ENV === 'production') {
-  app.get('/*splat', (req, res) => {
-    res.sendFile(path.join(__dirname, '../../client/build', 'index.html'));
-  });
-}
+// Serve React app for all non-API routes
+app.get('/*splat', (req, res) => {
+  res.sendFile(path.join(__dirname, '../../client/build', 'index.html'));
+});
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on http://0.0.0.0:${PORT}`);

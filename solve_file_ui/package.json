@@ -4,14 +4,11 @@
   "description": "Web UI for monitoring polyomino puzzle solver progress",
   "main": "server/dist/index.js",
   "scripts": {
-    "dev": "npx concurrently \"npm run server:dev\" \"npm run client:dev\"",
+    "start": "npm run build && cd server && npm start",
+    "dev": "npm run build && cd server && npm run dev",
     "build": "npm run client:build && npm run server:build",
-    "start": "cd server && NODE_ENV=production npm start",
-    "server:dev": "cd server && npm run dev",
     "server:build": "cd server && npm run build",
-    "client:dev": "cd client && npm start",
-    "client:build": "cd client && npm run build",
-    "server:start": "cd server && npm start"
+    "client:build": "cd client && npm run build"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

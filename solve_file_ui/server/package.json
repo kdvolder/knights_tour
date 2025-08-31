@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "nodemon src/index.ts",
-    "build": "tsc",
+    "build": "tsc && cp dist/server/src/* dist/ 2>/dev/null || true",
     "start": "node dist/index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
