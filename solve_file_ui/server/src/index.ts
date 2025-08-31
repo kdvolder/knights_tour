@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
-import { getSnapshot } from './snapshot';
+import { getSnapshot, startWatching, onSnapshotChange, offSnapshotChange } from './snapshot';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '8080', 10);
@@ -10,6 +10,13 @@ const PORT = parseInt(process.env.PORT || '8080', 10);
 app.use(cors());
 app.use(express.json());
 
+// Serve static files from React build, but only for non-API routes
+// app.use((req, res, next) => {
+//   if (req.path.startsWith('/api/')) {
+//     next(); // Skip static serving for API routes
+//   } else {
+//     express.static(path.join(__dirname, '../../client/build'))(req, res, next);
+//   }
 // Serve static files from React build
 app.use(express.static(path.join(__dirname, '../../client/build')));
 
@@ -31,6 +38,46 @@ app.get('/api/solutions', (req, res) => {
   res.json({ message: 'Solutions endpoint - to be implemented' });
 });
 
+// SSE endpoint for real-time snapshot updates
+app.get('/api/snapshotstream', (req, res) => {
+  console.log('SSE client connected');
+  
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Cache-Control'
+  });
+
+  // Listen for snapshot changes
+  const handleSnapshotChange = async () => {
+    try {
+      console.log('Fetching snapshot for SSE...');
+      const snapshot = await getSnapshot();
+      console.log('Snapshot fetched:', snapshot);
+      const data = JSON.stringify(snapshot);
+      res.write(`data: ${data}\n\n`);
+    } catch (error) {
+      console.error('Error in SSE snapshot update:', error);
+      const errorData = JSON.stringify({ error: "Failed to fetch snapshot" });
+      res.write(`data: ${errorData}\n\n`);
+    }
+  };
+
+  // Set up file watching using the proper API
+  onSnapshotChange(handleSnapshotChange);
+
+  // Send initial snapshot immediately
+  handleSnapshotChange();
+
+  // Clean up on client disconnect
+  req.on('close', () => {
+    console.log('SSE client disconnected');
+    offSnapshotChange(handleSnapshotChange);
+  });
+});
+
 app.get('/api/snapshot', async (req, res) => {
   try {
     const snapshot = await getSnapshot();
@@ -44,7 +91,7 @@ app.get('/api/snapshot', async (req, res) => {
   }
 });
 
-// Serve React app for all non-API routes
+// Serve React app for all non-API routes (this must be last)
 app.get('/*splat', (req, res) => {
   res.sendFile(path.join(__dirname, '../../client/build', 'index.html'));
 });
@@ -52,4 +99,7 @@ app.get('/*splat', (req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on http://0.0.0.0:${PORT}`);
   console.log(`Local access: http://localhost:${PORT}`);
+  
+  // Start watching for snapshot changes
+  startWatching();
 });
