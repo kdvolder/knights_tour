@@ -6,11 +6,11 @@
   "scripts": {
     "dev": "npx concurrently \"npm run server:dev\" \"npm run client:dev\"",
     "build": "npm run client:build && npm run server:build",
+    "start": "cd server && NODE_ENV=production npm start",
     "server:dev": "cd server && npm run dev",
     "server:build": "cd server && npm run build",
     "client:dev": "cd client && npm start",
     "client:build": "cd client && npm run build",
-    "start": "npm run server:start",
     "server:start": "cd server && npm start"
   },
   "devDependencies": {

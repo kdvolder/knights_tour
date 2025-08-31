@@ -1,12 +1,18 @@
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = parseInt(process.env.PORT || '8080', 10);
 
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Serve static files from React build in production
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(path.join(__dirname, '../../client/build')));
+}
 
 // Basic route
 app.get('/api/health', (req, res) => {
@@ -30,6 +36,14 @@ app.get('/api/snapshot', (req, res) => {
   res.json({ message: 'Snapshot endpoint - to be implemented' });
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+// Serve React app for all non-API routes in production
+if (process.env.NODE_ENV === 'production') {
+  app.get('/*splat', (req, res) => {
+    res.sendFile(path.join(__dirname, '../../client/build', 'index.html'));
+  });
+}
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running on http://0.0.0.0:${PORT}`);
+  console.log(`Local access: http://localhost:${PORT}`);
 });
