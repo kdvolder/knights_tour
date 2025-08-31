@@ -1,6 +1,6 @@
 import React from 'react';
 import './App.css';
-import { SnapshotBoard } from './components/SnapshotBoard';
+import { SnapshotMonitor } from './components/SnapshotMonitor';
 
 function App() {
   return (
@@ -10,7 +10,7 @@ function App() {
         <p>Real-time monitoring of polyomino puzzle solver progress</p>
       </header>
       <main className="App-main">
-        <SnapshotBoard />
+        <SnapshotMonitor />
       </main>
     </div>
   );
