@@ -18,7 +18,7 @@ app.get('/api/health', (req, res) => {
   res.json({ 
     status: 'OK', 
     timestamp: new Date().toISOString(),
-    message: 'Knights Tour Monitor API is running' 
+    message: 'Polyomino Puzzle Solver Monitor API is running' 
   });
 });
 

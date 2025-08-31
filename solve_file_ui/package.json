@@ -1,5 +1,5 @@
 {
-  "name": "knights-tour-monitor",
+  "name": "polyomino-solver-monitor",
   "version": "1.0.0",
   "description": "Web UI for monitoring polyomino puzzle solver progress",
   "main": "server/dist/index.js",

@@ -6,7 +6,7 @@ function App() {
   return (
     <div className="App">
       <header className="App-header">
-        <h1>Knights Tour Solver Monitor</h1>
+        <h1>Polyomino Puzzle Solver Monitor</h1>
         <p>Real-time monitoring of polyomino puzzle solver progress</p>
       </header>
       <main className="App-main">
