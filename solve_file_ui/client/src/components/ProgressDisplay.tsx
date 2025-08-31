@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import './ProgressDisplay.css';
+import { ProcessStats } from '../../../shared/types';
 
 interface ProgressDisplayProps {
   stats: string;
   metric: number | null;
   lastUpdated: Date | null;
   csvStats: string | null;
+  processStats: ProcessStats | null;
 }
 
 interface ParsedStats {
@@ -63,7 +65,8 @@ export const ProgressDisplay: React.FC<ProgressDisplayProps> = ({
   stats,
   metric,
   lastUpdated,
-  csvStats
+  csvStats,
+  processStats
 }) => {
   const [timeAgo, setTimeAgo] = useState<string>('');
 
@@ -91,6 +94,9 @@ export const ProgressDisplay: React.FC<ProgressDisplayProps> = ({
   const parsedStats = parseSnapshotStats(stats);
   const parsedCSV = csvStats ? parseCSVStats(csvStats) : null;
   const queueStatus = getQueueStatus(metric);
+  
+  // Calculate actual days from process uptime (uptime is in seconds)
+  const actualDays = processStats?.uptime ? processStats.uptime / (24 * 60 * 60) : null;
 
   return (
     <div className="progress-display">
@@ -147,7 +153,12 @@ export const ProgressDisplay: React.FC<ProgressDisplayProps> = ({
           </div>
           <div className="stat-row">
             <span className="stat-label">Solutions per Day:</span>
-            <span className="stat-value">{Math.round(parsedCSV.solutionsFound / 730).toLocaleString()}/day</span>
+            <span className="stat-value">
+              {actualDays ? 
+                Math.round(parsedCSV.solutionsFound / actualDays).toLocaleString() + '/day' : 
+                'calculating...'
+              }
+            </span>
           </div>
           <div className="stat-row">
             <span className="stat-label">Solve Rate:</span>

@@ -89,6 +89,7 @@ function App() {
                 metric={snapshot.metric}
                 lastUpdated={lastUpdated}
                 csvStats={snapshot.csvStats}
+                processStats={processStats}
               />
               <ProcessStats processStats={processStats} />
             </div>
