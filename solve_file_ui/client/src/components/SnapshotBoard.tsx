@@ -22,6 +22,29 @@ function getCellColor(ch: string) {
 
 export const SnapshotBoard: React.FC = () => {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [timeAgo, setTimeAgo] = useState<string>('');
+
+  // Update time ago display every second
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (lastUpdated) {
+        const now = new Date();
+        const diffMs = now.getTime() - lastUpdated.getTime();
+        const diffSeconds = Math.floor(diffMs / 1000);
+        
+        if (diffSeconds < 60) {
+          setTimeAgo(`${diffSeconds}s ago`);
+        } else {
+          const diffMinutes = Math.floor(diffSeconds / 60);
+          const remainingSeconds = diffSeconds % 60;
+          setTimeAgo(`${diffMinutes}m ${remainingSeconds}s ago`);
+        }
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [lastUpdated]);
 
   useEffect(() => {
     console.log('Setting up SSE connection...');
@@ -38,6 +61,7 @@ export const SnapshotBoard: React.FC = () => {
       try {
         const newSnapshot = JSON.parse(event.data);
         setSnapshot(newSnapshot);
+        setLastUpdated(new Date());
       } catch (error) {
         console.error('Error parsing snapshot data:', error);
       }
@@ -131,7 +155,14 @@ export const SnapshotBoard: React.FC = () => {
       </div>
       
       <div className="snapshot-board-info">
-        <h3>Solver Progress</h3>
+        <div className="snapshot-board-header">
+          <h3>Solver Progress</h3>
+          {lastUpdated && (
+            <div className="last-updated-badge">
+              Last updated: {timeAgo}
+            </div>
+          )}
+        </div>
         <div className="snapshot-board-stats">{snapshot.stats}</div>
         {snapshot.metric !== null && (
           <div className="snapshot-board-metric">

@@ -53,9 +53,7 @@ app.get('/api/snapshotstream', (req, res) => {
   // Listen for snapshot changes
   const handleSnapshotChange = async () => {
     try {
-      console.log('Fetching snapshot for SSE...');
       const snapshot = await getSnapshot();
-      console.log('Snapshot fetched:', snapshot);
       const data = JSON.stringify(snapshot);
       res.write(`data: ${data}\n\n`);
     } catch (error) {
