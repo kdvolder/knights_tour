@@ -15,6 +15,7 @@ interface TrendsChartProps {
 }
 
 type MetricType = 'queueSize' | 'queueGrowthRate' | 'solutions' | 'stepsPerSecond';
+type TimeRange = 'all' | '1year' | '6months' | '3months' | '1month' | '1week' | '1day';
 
 const METRIC_OPTIONS = [
   { value: 'queueSize' as MetricType, label: 'Queue Size', color: '#42a5f5' },
@@ -23,16 +24,28 @@ const METRIC_OPTIONS = [
   { value: 'stepsPerSecond' as MetricType, label: 'Processing Speed (steps/sec)', color: '#ffa726' }
 ];
 
+const TIME_RANGE_OPTIONS = [
+  { value: 'all' as TimeRange, label: 'All Time' },
+  { value: '1year' as TimeRange, label: 'Last Year' },
+  { value: '6months' as TimeRange, label: 'Last 6 Months' },
+  { value: '3months' as TimeRange, label: 'Last 3 Months' },
+  { value: '1month' as TimeRange, label: 'Last Month' },
+  { value: '1week' as TimeRange, label: 'Last Week' },
+  { value: '1day' as TimeRange, label: 'Last Day' }
+];
+
 export const TrendsChart: React.FC<TrendsChartProps> = React.memo(() => {
   const [data, setData] = useState<TrendDataPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedMetric, setSelectedMetric] = useState<MetricType>('queueSize');
+  const [selectedTimeRange, setSelectedTimeRange] = useState<TimeRange>('all');
 
-  const fetchTrendData = useCallback(async () => {
+  const fetchTrendData = useCallback(async (timeRange: TimeRange = 'all') => {
     try {
       setLoading(true);
-      const response = await fetch('/api/trends');
+      const url = `/api/trends?maxPoints=1000&timeRange=${timeRange}`;
+      const response = await fetch(url);
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
@@ -50,8 +63,8 @@ export const TrendsChart: React.FC<TrendsChartProps> = React.memo(() => {
   }, []);
 
   useEffect(() => {
-    fetchTrendData();
-  }, [fetchTrendData]);
+    fetchTrendData(selectedTimeRange);
+  }, [fetchTrendData, selectedTimeRange]);
 
   const parseCsvData = useCallback((csvText: string): TrendDataPoint[] => {
     const lines = csvText.trim().split('\n');
@@ -94,6 +107,43 @@ export const TrendsChart: React.FC<TrendsChartProps> = React.memo(() => {
     return METRIC_OPTIONS.find(option => option.value === selectedMetric) || METRIC_OPTIONS[0];
   }, [selectedMetric]);
 
+  const getDataRange = useCallback((data: TrendDataPoint[], metric: MetricType) => {
+    if (data.length === 0) return { min: 0, max: 100 };
+    
+    const values = data.map(point => point[metric]);
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    
+    // Add some padding to the range (5% on each side)
+    const range = max - min;
+    const padding = range * 0.05;
+    const calculatedMin = min - padding;
+    const calculatedMax = max + padding;
+    
+    // Apply zero floor rule: if all values are positive AND calculated min would be negative, use 0
+    const allValuesPositive = min >= 0;
+    const shouldApplyZeroFloor = allValuesPositive && calculatedMin < 0;
+    
+    return {
+      min: shouldApplyZeroFloor ? 0 : calculatedMin,
+      max: calculatedMax
+    };
+  }, []);
+
+  const getStepsRange = useCallback((data: TrendDataPoint[]) => {
+    if (data.length === 0) return { min: 0, max: 100 };
+    
+    const steps = data.map(point => point.steps);
+    const min = Math.min(...steps);
+    const max = Math.max(...steps);
+    
+    // No padding for steps - we want the line to start at the very left
+    return {
+      min: min,
+      max: max
+    };
+  }, []);
+
   const chartData = useMemo(() => data, [data]);
 
   if (loading) {
@@ -124,6 +174,17 @@ export const TrendsChart: React.FC<TrendsChartProps> = React.memo(() => {
         <h3>Solver Trends</h3>
         <div className="chart-controls">
           <select 
+            value={selectedTimeRange} 
+            onChange={(e) => setSelectedTimeRange(e.target.value as TimeRange)}
+            className="metric-selector"
+          >
+            {TIME_RANGE_OPTIONS.map(option => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <select 
             value={selectedMetric} 
             onChange={(e) => setSelectedMetric(e.target.value as MetricType)}
             className="metric-selector"
@@ -135,22 +196,32 @@ export const TrendsChart: React.FC<TrendsChartProps> = React.memo(() => {
             ))}
           </select>
           <div className="chart-info">
-            {data.length} data points across 2+ years
+            {data.length} data points
           </div>
         </div>
       </div>
       <div className="chart-container">
-        <ResponsiveContainer width="100%" height={400}>
+        <ResponsiveContainer width="100%" height="100%">
           <LineChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#333" />
             <XAxis 
               dataKey="steps" 
               tickFormatter={formatSteps}
               stroke="#666"
+              type="number"
+              scale="linear"
+              domain={(() => {
+                const range = getStepsRange(chartData);
+                return [range.min, range.max];
+              })()}
             />
             <YAxis 
               tickFormatter={(value) => formatMetricValue(value, selectedMetric)}
               stroke="#666"
+              domain={(() => {
+                const range = getDataRange(chartData, selectedMetric);
+                return [range.min, range.max];
+              })()}
             />
             <Tooltip 
               formatter={(value: number, name: string) => [

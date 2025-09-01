@@ -64,7 +64,8 @@ app.get('/api/process-stats', async (req, res) => {
 app.get('/api/trends', async (req, res) => {
   try {
     const maxPoints = parseInt(req.query.maxPoints as string) || 1000;
-    const trendData = await getTrendData(maxPoints);
+    const timeRange = req.query.timeRange as string;
+    const trendData = await getTrendData(maxPoints, timeRange);
     res.setHeader('Content-Type', 'text/csv');
     res.send(trendData);
   } catch (error) {
