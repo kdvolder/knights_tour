@@ -93,12 +93,25 @@ app.get('/api/snapshotstream', (req, res) => {
   const handleSnapshotChange = async () => {
     try {
       const snapshot = await getSnapshot();
+      
+      // Validate snapshot before sending to avoid race condition issues
+      if (!snapshot.board || snapshot.board.length === 0) {
+        console.warn('⚠️ Skipping SSE update - empty board detected (likely race condition)');
+        return;
+      }
+      
+      // Additional validation - ensure board has reasonable content
+      const hasValidContent = snapshot.board.some(row => row.trim().length > 0);
+      if (!hasValidContent) {
+        console.warn('⚠️ Skipping SSE update - board contains only empty strings');
+        return;
+      }
+      
       const data = JSON.stringify(snapshot);
       res.write(`data: ${data}\n\n`);
     } catch (error) {
       console.error('Error in SSE snapshot update:', error);
-      const errorData = JSON.stringify({ error: "Failed to fetch snapshot" });
-      res.write(`data: ${errorData}\n\n`);
+      // Don't send error events to client - just log and skip
     }
   };
 

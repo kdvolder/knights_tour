@@ -1,16 +1,35 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import './App.css';
 import { Board } from './components/Board';
 import { ProgressDisplay } from './components/ProgressDisplay';
 import { ProcessStats } from './components/ProcessStats';
 import { TrendsChart } from './components/TrendsChart';
+import { HeatmapThumbnail } from './components/HeatmapThumbnail';
 import { Snapshot, ProcessStats as ProcessStatsType } from '../../shared/types';
+import { BoardHeatmap } from './common/BoardHeatmap';
 
 function App() {
+  console.log('🏗️ App component rendering...');
+  
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [processStats, setProcessStats] = useState<ProcessStatsType | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [currentView, setCurrentView] = useState<'dashboard' | 'charts'>('dashboard');
+
+  // Heatmap tracking - use lazy initialization to avoid creating new instance on every render
+  const heatmapRef = useRef<BoardHeatmap | null>(null);
+  const getHeatmap = () => {
+    if (!heatmapRef.current) {
+      heatmapRef.current = new BoardHeatmap();
+    }
+    return heatmapRef.current;
+  };
+  const [heatmapData, setHeatmapData] = useState<{
+    normalizedMatrix: number[][];
+    rawMatrix: number[][];
+    percentileMatrix: number[][];
+    stats: { min: number; max: number; average: number; totalCells: number; maxAgeEver: number };
+  } | null>(null);
 
   // Fetch process stats
   const fetchProcessStats = async () => {
@@ -51,6 +70,18 @@ function App() {
         const newSnapshot = JSON.parse(event.data);
         setSnapshot(newSnapshot);
         setLastUpdated(new Date());
+        
+        // Update heatmap with new board data
+        if (newSnapshot.board) {
+          const heatmap = getHeatmap();
+          heatmap.updateBoard(newSnapshot.board);
+          const normalizedMatrix = heatmap.getNormalizedAgeMatrix();
+          const rawMatrix = heatmap.getAgeMatrix();
+          const percentileMatrix = heatmap.getPercentileMatrix();
+          const stats = heatmap.getStats();
+          
+          setHeatmapData({ normalizedMatrix, rawMatrix, percentileMatrix, stats });
+        }
       } catch (error) {
         console.error('Error parsing snapshot data:', error);
       }
@@ -113,6 +144,17 @@ function App() {
                   processStats={processStats}
                 />
                 <ProcessStats processStats={processStats} />
+                {heatmapData && (
+                  <HeatmapThumbnail
+                    normalizedAgeMatrix={heatmapData.normalizedMatrix}
+                    rawAgeMatrix={heatmapData.rawMatrix}
+                    percentileMatrix={heatmapData.percentileMatrix}
+                    stats={heatmapData.stats}
+                    width={180}
+                    height={180}
+                    title="Board Stability"
+                  />
+                )}
               </div>
             </div>
           )

@@ -1,0 +1,96 @@
+/* HeatmapThumbnail component styling */
+.heatmap-thumbnail {
+  background: white;
+  padding: 1rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  display: inline-block;
+  text-align: center;
+  min-width: 220px;
+}
+
+.heatmap-title {
+  margin: 0 0 0.75rem 0;
+  color: #333;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.heatmap-svg {
+  display: block;
+  margin: 0 auto 0.75rem auto;
+  border-radius: 4px;
+}
+
+.heatmap-empty {
+  color: #666;
+  font-style: italic;
+  padding: 2rem 1rem;
+  background: #f5f5f5;
+  border-radius: 4px;
+}
+
+.heatmap-stats {
+  text-align: left;
+  font-size: 0.8rem;
+  border-top: 1px solid #eee;
+  padding-top: 0.75rem;
+}
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.25rem;
+}
+
+.stat-row span:first-child {
+  color: #666;
+  font-weight: 500;
+}
+
+.stat-row span:last-child {
+  color: #333;
+  font-family: monospace;
+  font-weight: bold;
+}
+
+.heatmap-legend {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #f0f0f0;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.25rem;
+  font-size: 0.75rem;
+}
+
+.legend-color {
+  width: 12px;
+  height: 12px;
+  margin-right: 0.5rem;
+  border-radius: 2px;
+}
+
+.legend-item span {
+  color: #666;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .heatmap-thumbnail {
+    min-width: 180px;
+    padding: 0.75rem;
+  }
+  
+  .heatmap-title {
+    font-size: 0.85rem;
+  }
+  
+  .heatmap-stats {
+    font-size: 0.75rem;
+  }
+}

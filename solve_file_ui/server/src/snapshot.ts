@@ -13,6 +13,7 @@ import { EventEmitter } from 'events';
 
 const snapshotEmitter = new EventEmitter();
 let isWatching = false;
+let lastSnapshotContent: string | null = null;
 
 export async function getSnapshot(): Promise<Snapshot> {
   const content = (await readFile(SNAPSHOT_PATH, 'utf8')).trim();
@@ -127,10 +128,23 @@ export function startWatching(): void {
   isWatching = true;
   console.log(`Starting to watch snapshot file: ${SNAPSHOT_PATH}`);
   
-  const watcher = fs.watch(SNAPSHOT_PATH, (eventType) => {
+  const watcher = fs.watch(SNAPSHOT_PATH, async (eventType) => {
     if (eventType === 'change') {
-      // Emit snapshot change event
-      snapshotEmitter.emit('change');
+      try {
+        // Read current content
+        const currentContent = await readFile(SNAPSHOT_PATH, 'utf8');
+        
+        // Only emit if content actually changed
+        if (currentContent !== lastSnapshotContent) {
+          lastSnapshotContent = currentContent;
+          console.log('📝 Snapshot file content changed, emitting event');
+          snapshotEmitter.emit('change');
+        } else {
+          console.log('⚠️ File watcher triggered but content unchanged, skipping');
+        }
+      } catch (error) {
+        console.error('Error reading snapshot file during watch:', error);
+      }
     }
   });
 
@@ -138,6 +152,7 @@ export function startWatching(): void {
   watcher.on('error', (error) => {
     console.error('Snapshot file watcher error:', error);
     isWatching = false;
+    lastSnapshotContent = null;
   });
 }
 
