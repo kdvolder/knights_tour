@@ -137,7 +137,8 @@ export const TrendsChart: React.FC<TrendsChartProps> = React.memo(() => {
     const min = Math.min(...steps);
     const max = Math.max(...steps);
     
-    // No padding for steps - we want the line to start at the very left
+    // Use exact data range for steps - no rounding, no padding
+    // We want the line to start at the very left and end at the very right
     return {
       min: min,
       max: max

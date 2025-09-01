@@ -23,6 +23,7 @@
   display: flex;
   align-items: center;
   gap: 15px;
+  flex-wrap: wrap;
 }
 
 .metric-selector {
@@ -33,7 +34,7 @@
   border-radius: 4px;
   font-size: 0.9em;
   cursor: pointer;
-  min-width: 200px;
+  min-width: 180px;
 }
 
 .metric-selector:focus {
