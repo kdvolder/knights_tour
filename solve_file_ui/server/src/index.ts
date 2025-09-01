@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { getSnapshot, getProcessStats, startWatching, onSnapshotChange, offSnapshotChange } from './snapshot';
+import { getTrendData } from './trends';
 
 const app = express();
 const PORT = parseInt(process.env.PORT || '8080', 10);
@@ -54,6 +55,22 @@ app.get('/api/process-stats', async (req, res) => {
     console.error('Error getting process stats:', error);
     res.status(500).json({ 
       error: 'Failed to get process stats',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Trends data endpoint
+app.get('/api/trends', async (req, res) => {
+  try {
+    const maxPoints = parseInt(req.query.maxPoints as string) || 1000;
+    const trendData = await getTrendData(maxPoints);
+    res.setHeader('Content-Type', 'text/csv');
+    res.send(trendData);
+  } catch (error) {
+    console.error('Error getting trend data:', error);
+    res.status(500).json({ 
+      error: 'Failed to get trend data',
       message: error instanceof Error ? error.message : 'Unknown error'
     });
   }

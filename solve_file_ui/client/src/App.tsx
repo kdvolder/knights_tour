@@ -3,12 +3,14 @@ import './App.css';
 import { Board } from './components/Board';
 import { ProgressDisplay } from './components/ProgressDisplay';
 import { ProcessStats } from './components/ProcessStats';
+import { TrendsChart } from './components/TrendsChart';
 import { Snapshot, ProcessStats as ProcessStatsType } from '../../shared/types';
 
 function App() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [processStats, setProcessStats] = useState<ProcessStatsType | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [currentView, setCurrentView] = useState<'dashboard' | 'charts'>('dashboard');
 
   // Fetch process stats
   const fetchProcessStats = async () => {
@@ -74,25 +76,49 @@ function App() {
   return (
     <div className="App">
       <header className="App-header">
-        <h1>Polyomino Puzzle Solver Monitor</h1>
-        <p>Real-time monitoring of polyomino puzzle solver progress</p>
+        <div className="header-content">
+          <div>
+            <h1>Polyomino Puzzle Solver Monitor</h1>
+            <p>Real-time monitoring of polyomino puzzle solver progress</p>
+          </div>
+          <div className="view-toggle">
+            <button 
+              className={currentView === 'dashboard' ? 'active' : ''}
+              onClick={() => setCurrentView('dashboard')}
+            >
+              Dashboard
+            </button>
+            <button 
+              className={currentView === 'charts' ? 'active' : ''}
+              onClick={() => setCurrentView('charts')}
+            >
+              Charts
+            </button>
+          </div>
+        </div>
       </header>
       <main className="App-main">
-        {!snapshot ? (
-          <div className="loading-message">Loading board...</div>
-        ) : (
-          <div className="content-container">
-            <Board board={snapshot.board} />
-            <div className="progress-section">
-              <ProgressDisplay 
-                stats={snapshot.stats}
-                metric={snapshot.metric}
-                lastUpdated={lastUpdated}
-                csvStats={snapshot.csvStats}
-                processStats={processStats}
-              />
-              <ProcessStats processStats={processStats} />
+        {currentView === 'dashboard' ? (
+          !snapshot ? (
+            <div className="loading-message">Loading board...</div>
+          ) : (
+            <div className="content-container">
+              <Board board={snapshot.board} />
+              <div className="progress-section">
+                <ProgressDisplay 
+                  stats={snapshot.stats}
+                  metric={snapshot.metric}
+                  lastUpdated={lastUpdated}
+                  csvStats={snapshot.csvStats}
+                  processStats={processStats}
+                />
+                <ProcessStats processStats={processStats} />
+              </div>
             </div>
+          )
+        ) : (
+          <div className="charts-container">
+            <TrendsChart />
           </div>
         )}
       </main>
