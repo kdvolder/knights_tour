@@ -54,8 +54,13 @@
 
 .chart-container {
   width: 100%;
-  height: 400px;
+  /* Use available viewport height minus header, padding, and chart header */
+  height: calc(100vh - 250px);
+  min-height: 300px;
+  max-height: 80vh;
 }
+
+/* Remove all the media query complexity */
 
 .chart-loading,
 .chart-error {
@@ -79,7 +84,8 @@
   }
   
   .chart-container {
-    height: 300px;
+    height: calc(100vh - 230px); /* Adjust for mobile header size */
+    min-height: 250px;
   }
   
   .chart-header {

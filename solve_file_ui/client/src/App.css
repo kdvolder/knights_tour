@@ -75,8 +75,8 @@
   display: flex;
   gap: 1.5rem;
   align-items: flex-start;
-  max-width: 1200px;
   width: 100%;
+  padding: 0 20px; /* Add padding instead of max-width */
 }
 
 .progress-section {
@@ -86,8 +86,8 @@
 }
 
 .charts-container {
-  max-width: 1200px;
   width: 100%;
+  padding: 0 20px; /* Add some padding instead of max-width */
 }
 
 @media (max-width: 768px) {
