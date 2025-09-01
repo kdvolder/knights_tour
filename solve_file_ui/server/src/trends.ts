@@ -1,6 +1,7 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { STATS_PATH } from './paths';
+import { getProcessStats } from './snapshot';
 
 const execAsync = promisify(exec);
 
@@ -27,20 +28,33 @@ export async function getTrendData(maxPoints: number = 1000, timeRange?: string)
     
     // If a time range is specified, calculate which lines to sample from
     if (timeRange && timeRange !== 'all') {
-      const timeRangeMultipliers: { [key: string]: number } = {
-        '1day': 0.001,    // Last 0.1% of data
-        '1week': 0.01,    // Last 1% of data
-        '1month': 0.05,   // Last 5% of data
-        '3months': 0.15,  // Last 15% of data
-        '6months': 0.3,   // Last 30% of data
-        '1year': 0.6      // Last 60% of data
+      // Convert time range to days for calculation
+      const timeRangeDays: { [key: string]: number } = {
+        '1day': 1,
+        '1week': 7,
+        '1month': 30,
+        '3months': 90,
+        '6months': 180,
+        '1year': 365
       };
       
-      const multiplier = timeRangeMultipliers[timeRange] || 1;
-      const linesToInclude = Math.floor(totalLines * multiplier);
-      startLine = Math.max(1, totalLines - linesToInclude + 1);
-      
-      console.log(`Time range ${timeRange}: Using lines ${startLine} to ${endLine} (${linesToInclude} lines)`);
+      const requestedDays = timeRangeDays[timeRange];
+      if (requestedDays) {
+        // Get the actual process uptime to determine total data timespan
+        const processStats = await getProcessStats();
+        if (processStats && processStats.uptime) {
+          const actualTotalDays = processStats.uptime / (24 * 60 * 60);
+          const fraction = Math.min(1, requestedDays / actualTotalDays);
+          const linesToInclude = Math.max(50, Math.floor(totalLines * fraction));
+          startLine = Math.max(1, totalLines - linesToInclude + 1);
+          
+          console.log(`Time range ${timeRange} (${requestedDays} days): Process running for ${actualTotalDays.toFixed(1)} days, using ${linesToInclude} lines (${(fraction * 100).toFixed(1)}% of data)`);
+        } else {
+          console.log(`Time range ${timeRange}: Could not determine process uptime, time range filtering disabled - returning all data`);
+          // If we can't determine the actual timespan, we can't do meaningful time range filtering
+          // So just return all data rather than making up arbitrary estimates
+        }
+      }
     }
     
     // Calculate sampling interval - take every Nth line to get ~maxPoints from the selected range
