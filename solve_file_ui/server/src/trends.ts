@@ -11,6 +11,7 @@ export interface TrendDataPoint {
   queueGrowthRate: number; // Future use
   solutions: number;       // Future use
   stepsPerSecond: number;  // Future use
+  totalDequeues: number;   // Items processed (dequeue operations)
 }
 
 export async function getTrendData(maxPoints: number = 1000, timeRange?: string): Promise<string> {
@@ -20,7 +21,7 @@ export async function getTrendData(maxPoints: number = 1000, timeRange?: string)
     const totalLines = parseInt(wcOutput.split(' ')[0]);
     
     if (totalLines === 0) {
-      return 'steps,queueSize,queueGrowthRate,solutions,stepsPerSecond\n';
+      return 'steps,totalDequeues,queueSize,queueGrowthRate,solutions,stepsPerSecond\n';
     }
     
     let startLine = 1;
@@ -64,17 +65,17 @@ export async function getTrendData(maxPoints: number = 1000, timeRange?: string)
     console.log(`Sampling CSV: ${totalLines} total lines, range ${startLine}-${endLine} (${rangeLines} lines), taking every ${interval}th line for ~${Math.floor(rangeLines / interval)} points`);
     
     // Use awk to efficiently sample every Nth line from the specified range
-    // Extract columns: 1=steps, 4=queue-size, 5=queue-growth-rate, 6=solutions, 8=avg-steps-per-second
+    // Extract columns: 1=steps, 3=total-dequeues, 4=queue-size, 5=queue-growth-rate, 6=solutions, 8=avg-steps-per-second
     const { stdout: sampledOutput } = await execAsync(
-      `awk -F',' 'NR >= ${startLine} && NR <= ${endLine} && (NR - ${startLine}) % ${interval} == 0 { print $1","$4","$5","$6","$8 }' "${STATS_PATH}"`
+      `awk -F',' 'NR >= ${startLine} && NR <= ${endLine} && (NR - ${startLine}) % ${interval} == 0 { print $1","$3","$4","$5","$6","$8 }' "${STATS_PATH}"`
     );
     
     // Add header and return
-    const header = 'steps,queueSize,queueGrowthRate,solutions,stepsPerSecond\n';
+    const header = 'steps,totalDequeues,queueSize,queueGrowthRate,solutions,stepsPerSecond\n';
     return header + sampledOutput;
     
   } catch (error) {
     console.error('Error reading trend data from CSV:', error);
-    return 'steps,queueSize,queueGrowthRate,solutions,stepsPerSecond\n';
+    return 'steps,totalDequeues,queueSize,queueGrowthRate,solutions,stepsPerSecond\n';
   }
 }

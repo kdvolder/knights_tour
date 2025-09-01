@@ -4,6 +4,7 @@ import './TrendsChart.css';
 
 interface TrendDataPoint {
   steps: number;
+  totalDequeues: number;
   queueSize: number;
   queueGrowthRate: number;
   solutions: number;
@@ -14,11 +15,12 @@ interface TrendsChartProps {
   // For now, no props needed - component will fetch its own data
 }
 
-type MetricType = 'queueSize' | 'queueGrowthRate' | 'solutions' | 'stepsPerSecond';
+type MetricType = 'queueSize' | 'queueGrowthRate' | 'solutions' | 'stepsPerSecond' | 'totalDequeues';
 type TimeRange = 'all' | '1year' | '6months' | '3months' | '1month' | '1week' | '1day';
 
 const METRIC_OPTIONS = [
   { value: 'queueSize' as MetricType, label: 'Queue Size', color: '#42a5f5' },
+  { value: 'totalDequeues' as MetricType, label: 'Items Processed', color: '#9c27b0' },
   { value: 'queueGrowthRate' as MetricType, label: 'Queue Growth Rate', color: '#ff6b35' },
   { value: 'solutions' as MetricType, label: 'Solutions Found', color: '#66bb6a' },
   { value: 'stepsPerSecond' as MetricType, label: 'Processing Speed (steps/sec)', color: '#ffa726' }
@@ -71,9 +73,10 @@ export const TrendsChart: React.FC<TrendsChartProps> = React.memo(() => {
     const dataLines = lines.slice(1); // Skip header
     
     return dataLines.map(line => {
-      const [steps, queueSize, queueGrowthRate, solutions, stepsPerSecond] = line.split(',').map(Number);
+      const [steps, totalDequeues, queueSize, queueGrowthRate, solutions, stepsPerSecond] = line.split(',').map(Number);
       return {
         steps,
+        totalDequeues,
         queueSize,
         queueGrowthRate,
         solutions,
@@ -93,6 +96,7 @@ export const TrendsChart: React.FC<TrendsChartProps> = React.memo(() => {
     switch (metric) {
       case 'queueSize':
       case 'solutions':
+      case 'totalDequeues':
         return value.toLocaleString();
       case 'queueGrowthRate':
         return value.toFixed(2);
