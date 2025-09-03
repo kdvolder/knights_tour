@@ -13,10 +13,16 @@ import { EventEmitter } from 'events';
 
 const snapshotEmitter = new EventEmitter();
 let isWatching = false;
-let lastSnapshotContent: string | null = null;
+let lastValidSnapshot: Snapshot | null = null;
 
 export async function getSnapshot(): Promise<Snapshot> {
   const content = (await readFile(SNAPSHOT_PATH, 'utf8')).trim();
+  
+  // Validate that we have actual content
+  if (!content || content.length < 10) {
+    throw new Error('Snapshot file is empty or too short');
+  }
+  
   const lines = content.split('\n');
   let board: string[] = [];
   let i = 0;
@@ -24,12 +30,48 @@ export async function getSnapshot(): Promise<Snapshot> {
     board.push(lines[i]);
     i++;
   }
+  
+  // Validate board
+  if (board.length === 0) {
+    throw new Error('No board data found in snapshot');
+  }
+  
+  // Validate all board rows have same length
+  const firstRowLength = board[0].length;
+  if (board.some(row => row.length !== firstRowLength)) {
+    throw new Error('Board rows have inconsistent lengths');
+  }
+  
   // Skip the empty line
   i++;
   // Stats is the next line
   const stats = lines[i] || '';
+  
+  // Validate we have stats
+  if (!stats.trim()) {
+    throw new Error('No stats data found in snapshot');
+  }
+  
+  // Validate stats format - should contain numbers and colons
+  if (!stats.match(/\d+:\s*\d+\s*\/\s*\d+\s*\/\s*\d+/)) {
+    throw new Error('Stats line has invalid format');
+  }
+  
   // Metric is the next line (parse as float)
-  const metric = lines[i + 1] ? parseFloat(lines[i + 1]) : null;
+  const metricLine = lines[i + 1];
+  if (!metricLine || metricLine.trim() === '') {
+    throw new Error('No metric data found in snapshot');
+  }
+  
+  const metric = parseFloat(metricLine);
+  if (isNaN(metric)) {
+    throw new Error('Metric is not a valid number');
+  }
+  
+  // Ensure we have enough lines in the file
+  if (lines.length < i + 2) {
+    throw new Error('Snapshot file appears truncated');
+  }
   
   // Read the last row from the CSV stats file efficiently
   let csvStats: string | null = null;
@@ -128,22 +170,35 @@ export function startWatching(): void {
   isWatching = true;
   console.log(`Starting to watch snapshot file: ${SNAPSHOT_PATH}`);
   
+  // Initialize with current valid snapshot to avoid false positives
+  getSnapshot().then(snapshot => {
+    lastValidSnapshot = snapshot;
+    console.log('📚 Initialized lastValidSnapshot for duplicate detection');
+  }).catch(error => {
+    console.error('Error initializing snapshot:', error);
+    lastValidSnapshot = null;
+  });
+  
   const watcher = fs.watch(SNAPSHOT_PATH, async (eventType) => {
     if (eventType === 'change') {
       try {
-        // Read current content
-        const currentContent = await readFile(SNAPSHOT_PATH, 'utf8');
+        // Parse the current snapshot
+        const currentSnapshot = await getSnapshot();
         
-        // Only emit if content actually changed
-        if (currentContent !== lastSnapshotContent) {
-          lastSnapshotContent = currentContent;
-          console.log('📝 Snapshot file content changed, emitting event');
+        // Compare parsed content, not raw file content
+        const snapshotChanged = !lastValidSnapshot || 
+          JSON.stringify(currentSnapshot) !== JSON.stringify(lastValidSnapshot);
+        
+        if (snapshotChanged) {
+          lastValidSnapshot = currentSnapshot;
+          console.log('📝 Snapshot content changed (parsed), emitting event');
           snapshotEmitter.emit('change');
         } else {
-          console.log('⚠️ File watcher triggered but content unchanged, skipping');
+          console.log('⚠️ File watcher triggered but parsed content unchanged, skipping');
         }
       } catch (error) {
-        console.error('Error reading snapshot file during watch:', error);
+        console.error('Error parsing snapshot file during watch (likely partial read):', error);
+        // Don't emit event on parse failures - likely partial file read
       }
     }
   });
@@ -152,7 +207,7 @@ export function startWatching(): void {
   watcher.on('error', (error) => {
     console.error('Snapshot file watcher error:', error);
     isWatching = false;
-    lastSnapshotContent = null;
+    lastValidSnapshot = null;
   });
 }
 

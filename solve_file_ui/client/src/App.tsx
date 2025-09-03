@@ -73,12 +73,17 @@ function App() {
         
         // Update heatmap with new board data
         if (newSnapshot.board) {
+          console.log('📋 Board data received:', newSnapshot.board.length, 'rows');
+          console.log('📋 First few rows:', newSnapshot.board.slice(0, 3));
+          
           const heatmap = getHeatmap();
           heatmap.updateBoard(newSnapshot.board);
           const normalizedMatrix = heatmap.getNormalizedAgeMatrix();
           const rawMatrix = heatmap.getAgeMatrix();
           const percentileMatrix = heatmap.getPercentileMatrix();
           const stats = heatmap.getStats();
+          
+          console.log('🔥 Heatmap stats after update:', stats);
           
           setHeatmapData({ normalizedMatrix, rawMatrix, percentileMatrix, stats });
         }
@@ -134,7 +139,10 @@ function App() {
             <div className="loading-message">Loading board...</div>
           ) : (
             <div className="content-container">
-              <Board board={snapshot.board} />
+              <Board 
+                board={snapshot.board} 
+                percentileMatrix={heatmapData?.percentileMatrix}
+              />
               <div className="progress-section">
                 <ProgressDisplay 
                   stats={snapshot.stats}

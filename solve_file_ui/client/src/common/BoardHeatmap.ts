@@ -76,22 +76,29 @@ export class BoardHeatmap {
       console.log(`🔄 Heatmap ${this.id}: ${changedCells}/${totalCells} cells changed`);
       const zeroAges = this.ageMatrix.flat().filter(age => age === 0).length;
       console.log(`🔢 Heatmap ${this.id}: ${zeroAges} cells with age 0`);
+      
+      // Detect potential duplicate events (no changes when we expect some)
+      if (changedCells === 0) {
+        console.warn(`🔁 DUPLICATE EVENT DETECTED in ${this.id} - No cells changed! Same board sent again.`);
+        console.log('📋 Board content (first 3 rows):', currentBoard.slice(0, 3).map(row => row.join('')));
+      }
     }
 
-    // Check if all ages became 0 after update (indicating a suspicious reset)
+    // Check if all ages became 0 after update (indicating a solution or major board change)
     const allAgesAreZeroAfterUpdate = this.ageMatrix.every(row => row.every(age => age === 0));
     
     if (hadAgesBeforeUpdate && allAgesAreZeroAfterUpdate) {
-      console.warn(`🔥🔥🔥 HEATMAP RESET DETECTED in ${this.id} - All ages went from >0 to 0! 🔥🔥🔥`);
-      console.log('📋 PREVIOUS board data:');
-      console.log('Previous board (2D char array):', this.previousBoard);
-      console.log('Previous board (as strings):', this.previousBoard?.map(row => row.join('')));
-      console.log('📋 NEW board data that caused reset:');
-      console.log('New board (2D char array):', currentBoard);
-      console.log('New board (as strings):', currentBoard.map(row => row.join('')));
-      console.log('Original string array input:', board);
-      console.log('Board dimensions:', width, 'x', height);
-      console.log('🔥🔥🔥 END RESET DEBUG INFO 🔥🔥🔥');
+      console.warn(`🎯 SOLUTION DETECTED in ${this.id} - All ages reset to 0! This likely indicates a solved puzzle.`);
+      console.log(`� Changed cells: ${changedCells}/${totalCells} (${((changedCells/totalCells)*100).toFixed(1)}%)`);
+      console.log('📋 PREVIOUS board (first 3 rows):', this.previousBoard?.slice(0, 3).map(row => row.join('')));
+      console.log('📋 NEW board (first 3 rows):', currentBoard.slice(0, 3).map(row => row.join('')));
+      
+      // Check if board is completely different (solution state) vs just some changes
+      if (changedCells === totalCells) {
+        console.log('🎉 COMPLETE BOARD CHANGE - Likely solution found!');
+      } else {
+        console.log('🤔 PARTIAL RESET - May be backtracking or state change');
+      }
     }
 
     // Store current board for next comparison
