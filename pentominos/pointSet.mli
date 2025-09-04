@@ -49,3 +49,11 @@ val normalize : t -> t
 
 (** Move all points an equal distance in both x and y coordinates *)
 val translate : Point.t -> t -> t
+
+(** [symmetries shape] returns a list of (transform, pointset) pairs representing 
+    all unique symmetries of the given pointset. Each [transform] is a function [t -> t] 
+    that applies a symmetry operation to a point set, and [pointset] is the shape transformed 
+    by that function. The result covers all unique rotations and reflections that map 
+    the pointset onto itself.
+*)
+val symmetries : t -> ((t -> t) * t) list

@@ -138,12 +138,13 @@ let mirror_point Point.{x;y} = Point.{y = x; x = y}
 
 let rotate points = map rotate_point points |> normalize_translation
 let mirror = map mirror_point
-  
+
+module PointSetSet = Set.Make(struct 
+  type nonrec t = t
+  let compare = compare 
+end)
+
 let variants ini = 
-  let module PointSetSet = Set.Make(struct 
-    type nonrec t = t
-    let compare = compare 
-  end) in
   let open Searchspace in
   (
     int_range 0 1 |=> fun mirror_count ->
@@ -250,9 +251,9 @@ let%expect_test "normalized rep of variants are equal to one another" =
 let%expect_test "rotate and normalize translation" =
   let points = of_string (
     ".#     
-      ##      
-      .#
-      .#"
+     ##      
+     .#
+     .#"
   ) in
   for i = 0 to 3 do
     Fun.repeat i rotate points
@@ -291,5 +292,300 @@ let%expect_test "rotate and normalize translation" =
     =======================
     ####
     .#.. |}]
+
+
+let symmetries shape =
+  let open Searchspace in
+  let transforms =
+    int_range 0 1 |=> fun mirror_count ->
+    int_range 0 3 |-> fun rot_count ->
+      fun pts ->
+        pts
+        |> normalize_translation
+        |> Fun.repeat rot_count rotate
+        |> Fun.repeat mirror_count mirror
+  in
+  let seen = ref PointSetSet.empty in
+  let results = ref [] in
+  transforms |> to_seq |> Seq.iter (fun transform ->
+    let transformed = transform shape |> normalize_translation in
+    if not (PointSetSet.mem transformed !seen) then begin
+      seen := PointSetSet.add transformed !seen;
+      results := (transform, transformed) :: !results
+    end
+  );
+  List.rev !results
+
+let%expect_test "symmetries" =
+  let input_shapes = List.map of_string [
+      "##
+       ##"
+   ;
+      "##
+       ##
+       ##
+       ##"
+   ;
+      "#.
+       ##"
+    ;
+      "#
+       ##"
+    ;
+      "#
+       #
+       ##"
+  ] in
+  let test_shape = of_string (
+    ".#     
+     ##      
+     .#
+     .#"
+  ) in
+  input_shapes |> List.iter (fun shape ->
+    Printf.printf "Shape:\n%s\n" (to_string shape);
+    let syms = symmetries shape in
+    Printf.printf "Symmetries: %d\n" (List.length syms);
+    List.iteri (fun i (transform, b) -> (
+      Printf.printf "Symmetry %d:\n" i;
+      Printf.printf "%s\n" (to_string b);
+      Printf.printf "Transformed shape:\n";
+      Printf.printf "%s\n" (test_shape |> transform |> to_string);
+      Printf.printf "---\n"
+    )) syms;
+    Printf.printf "========================\n"
+  ); 
+  [%expect{|
+    Shape:
+    ##
+    ##
+
+    Symmetries: 1
+    Symmetry 0:
+    ##
+    ##
+
+    Transformed shape:
+    .#
+    ##
+    .#
+    .#
+
+    ---
+    ========================
+    Shape:
+    ##
+    ##
+    ##
+    ##
+
+    Symmetries: 2
+    Symmetry 0:
+    ##
+    ##
+    ##
+    ##
+
+    Transformed shape:
+    .#
+    ##
+    .#
+    .#
+
+    ---
+    Symmetry 1:
+    ####
+    ####
+
+    Transformed shape:
+    ..#.
+    ####
+
+    ---
+    ========================
+    Shape:
+    #.
+    ##
+
+    Symmetries: 4
+    Symmetry 0:
+    #.
+    ##
+
+    Transformed shape:
+    .#
+    ##
+    .#
+    .#
+
+    ---
+    Symmetry 1:
+    ##
+    #.
+
+    Transformed shape:
+    ..#.
+    ####
+
+    ---
+    Symmetry 2:
+    ##
+    .#
+
+    Transformed shape:
+    #.
+    #.
+    ##
+    #.
+
+    ---
+    Symmetry 3:
+    .#
+    ##
+
+    Transformed shape:
+    ####
+    .#..
+
+    ---
+    ========================
+    Shape:
+    #.
+    ##
+
+    Symmetries: 4
+    Symmetry 0:
+    #.
+    ##
+
+    Transformed shape:
+    .#
+    ##
+    .#
+    .#
+
+    ---
+    Symmetry 1:
+    ##
+    #.
+
+    Transformed shape:
+    ..#.
+    ####
+
+    ---
+    Symmetry 2:
+    ##
+    .#
+
+    Transformed shape:
+    #.
+    #.
+    ##
+    #.
+
+    ---
+    Symmetry 3:
+    .#
+    ##
+
+    Transformed shape:
+    ####
+    .#..
+
+    ---
+    ========================
+    Shape:
+    #.
+    #.
+    ##
+
+    Symmetries: 8
+    Symmetry 0:
+    #.
+    #.
+    ##
+
+    Transformed shape:
+    .#
+    ##
+    .#
+    .#
+
+    ---
+    Symmetry 1:
+    ###
+    #..
+
+    Transformed shape:
+    ..#.
+    ####
+
+    ---
+    Symmetry 2:
+    ##
+    .#
+    .#
+
+    Transformed shape:
+    #.
+    #.
+    ##
+    #.
+
+    ---
+    Symmetry 3:
+    ..#
+    ###
+
+    Transformed shape:
+    ####
+    .#..
+
+    ---
+    Symmetry 4:
+    ###
+    ..#
+
+    Transformed shape:
+    .#..
+    ####
+
+    ---
+    Symmetry 5:
+    ##
+    #.
+    #.
+
+    Transformed shape:
+    .#
+    .#
+    ##
+    .#
+
+    ---
+    Symmetry 6:
+    #..
+    ###
+
+    Transformed shape:
+    ####
+    ..#.
+
+    ---
+    Symmetry 7:
+    .#
+    .#
+    ##
+
+    Transformed shape:
+    #.
+    ##
+    #.
+    #.
+
+    ---
+    ========================
+    |}]
 
     
