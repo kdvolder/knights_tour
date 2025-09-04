@@ -13,7 +13,7 @@ let alt2 x y = Fork StaQue.(
   push x (singleton y)
 )
 
-let alt choices = Fork (List.fold_right StaQue.push choices StaQue.empty)
+let alt choices = Fork (StaQue.of_list choices)
 
 let empty = Fork StaQue.empty
 
@@ -118,9 +118,7 @@ let rec to_seq ?(search=search) space () =
   | None -> Seq.Nil
   | Some (fst,rst) -> Seq.Cons (fst, to_seq ~search rst) 
 
-let rec of_list = function
-  | [] -> empty
-  | x::xs -> return x ++ of_list xs
+let of_list choices = List.map return choices |> alt
 
 let rec ints_from start = return start ++ defer (fun () -> (ints_from (1 + start)))
 let nats = ints_from 0
@@ -373,4 +371,32 @@ let%expect_test "pp_decisions_tree" = begin
                       3 + 3 = 6
                       FAIL
              FAIL |}]
+end
+
+let%expect_test "pp_decisions_tree_of_list_ints" = begin
+  let sums =
+   let* n1 = of_list [1; 2; 3] in
+   let* n2 = of_list [1; 2; 3] in
+   return (Printf.sprintf "%d + %d = %d" n1 n2 (n1 + n2))
+  in
+  let pp = pp_decision_tree Format.pp_print_string Format.std_formatter in
+  pp sums;
+  Format.pp_print_flush Format.std_formatter (); (* ensure output is flushed *)
+  [%expect{|
+    choices
+       choices
+          1 + 1 = 2
+          1 + 2 = 3
+          1 + 3 = 4
+
+       choices
+          2 + 1 = 3
+          2 + 2 = 4
+          2 + 3 = 5
+
+       choices
+          3 + 1 = 4
+          3 + 2 = 5
+          3 + 3 = 6
+    |}]
 end
