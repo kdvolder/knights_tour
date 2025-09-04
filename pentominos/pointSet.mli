@@ -43,17 +43,17 @@ val normalize_translation : t -> t
     applying [normalize_translation].*)
 val variants : t -> t list
 
+(** [variants_with_transform shape] returns a list of [(transform, variant)] pairs representing 
+    all variants of a given pointset. A variant is a shape obtained by applying rotation and mirroring 
+    transformations, followed by [normalize_translation]. The [transform] paired with each variant is a 
+    function [t -> t] that applies a symmetry operation to the input pointset and produces the corresponding 
+    variant when applied to the input. 
+*)
+val variants_with_transform : t -> ((t -> t) * t) list
+
 (** Gets a canonical representation of a pointset that can be used to represent
     all variants. *)
 val normalize : t -> t
 
 (** Move all points an equal distance in both x and y coordinates *)
 val translate : Point.t -> t -> t
-
-(** [symmetries shape] returns a list of (transform, pointset) pairs representing 
-    all unique symmetries of the given pointset. Each [transform] is a function [t -> t] 
-    that applies a symmetry operation to a point set, and [pointset] is the shape transformed 
-    by that function. The result covers all unique rotations and reflections that map 
-    the pointset onto itself.
-*)
-val symmetries : t -> ((t -> t) * t) list

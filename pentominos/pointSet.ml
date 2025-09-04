@@ -158,6 +158,27 @@ let variants ini =
   |> PointSetSet.to_seq
   |> List.of_seq
   
+let variants_with_transform shape =
+  let open Searchspace in
+  let transforms =
+    int_range 0 1 |=> fun mirror_count ->
+    int_range 0 3 |-> fun rot_count ->
+      fun pts ->
+        pts
+        |> normalize_translation
+        |> Fun.repeat rot_count rotate
+        |> Fun.repeat mirror_count mirror
+  in
+  let seen = ref PointSetSet.empty in
+  let results = ref [] in
+  transforms |> to_seq |> Seq.iter (fun transform ->
+    let transformed = transform shape |> normalize_translation in
+    if not (PointSetSet.mem transformed !seen) then begin
+      seen := PointSetSet.add transformed !seen;
+      results := (transform, transformed) :: !results
+    end
+  );
+  List.rev !results
   
 let normalize points = 
   points
@@ -293,30 +314,7 @@ let%expect_test "rotate and normalize translation" =
     ####
     .#.. |}]
 
-
-let symmetries shape =
-  let open Searchspace in
-  let transforms =
-    int_range 0 1 |=> fun mirror_count ->
-    int_range 0 3 |-> fun rot_count ->
-      fun pts ->
-        pts
-        |> normalize_translation
-        |> Fun.repeat rot_count rotate
-        |> Fun.repeat mirror_count mirror
-  in
-  let seen = ref PointSetSet.empty in
-  let results = ref [] in
-  transforms |> to_seq |> Seq.iter (fun transform ->
-    let transformed = transform shape |> normalize_translation in
-    if not (PointSetSet.mem transformed !seen) then begin
-      seen := PointSetSet.add transformed !seen;
-      results := (transform, transformed) :: !results
-    end
-  );
-  List.rev !results
-
-let%expect_test "symmetries" =
+let%expect_test "variants_with_transform" =
   let input_shapes = List.map of_string [
       "##
        ##"
@@ -344,7 +342,7 @@ let%expect_test "symmetries" =
   ) in
   input_shapes |> List.iter (fun shape ->
     Printf.printf "Shape:\n%s\n" (to_string shape);
-    let syms = symmetries shape in
+  let syms = variants_with_transform shape in
     Printf.printf "Symmetries: %d\n" (List.length syms);
     List.iteri (fun i (transform, b) -> (
       Printf.printf "Symmetry %d:\n" i;
