@@ -4,4 +4,7 @@
   (libraries collections)
   (inline_tests)
   (preprocess (pps ppx_inline_test ppx_expect))
+  (modules searchspace stochastic_estimator memfree)
+  (private_modules memfree)
+  (wrapped false)
 )
