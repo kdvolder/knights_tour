@@ -53,5 +53,8 @@ module type S = sig
   (** [get i s] finds element at index i from the front. 
       For example [get 0 s] is equivalent [pop s] *)
   val get : int -> 'a t -> 'a
+
+  (** [to_list s] converts a Dlist into a list by popping all elements from the front. *)
+  val to_list : 'a t -> 'a list
   
 end

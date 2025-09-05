@@ -80,6 +80,17 @@ let append xs ys =
 
 let of_list xs = Clist.{front=of_list xs; back=empty}
 
+let to_list {front;back} =
+  Clist.to_list front @ (Clist.to_list (Clist.reverse back))
+
+let%expect_test "to_list basic" =
+  let d = append (of_list [1;2;3]) (of_list [10;20;30]) in
+  let lst = to_list d in
+  List.iter (fun x -> Printf.printf "%d " x) lst;
+  [%expect {| 1 2 3 10 20 30 |}]
+
+
+
 let%expect_test "append" =
    let it = append (of_list [1;2;3]) (of_list [4;5;6]) in
    println "start" it;

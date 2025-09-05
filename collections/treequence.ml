@@ -46,6 +46,17 @@ let rec map f = function
 | Single x -> Single (f x)
 | Append {sz; lt; rt} -> Append {sz; lt=map f lt; rt=map f rt}   
 
+let rec to_list = function
+  | Empty -> []
+  | Single x -> [x]
+  | Append {lt; rt; _} -> to_list lt @ to_list rt
+
+let%expect_test "to_list basic" =
+  let t = push 1 (push 2 (push 3 empty)) in
+  let lst = to_list t in
+  List.iter (fun x -> Printf.printf "%d " x) lst;
+  [%expect {| 1 2 3 |}]
+
 let rec to_string str = function
 | Empty -> "nil"
 | Single x -> str x
