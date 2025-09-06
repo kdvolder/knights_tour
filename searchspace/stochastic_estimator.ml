@@ -145,22 +145,22 @@ let%expect_test "decision tree for sums divisible by 7" =
    |}]
 
 type stats = {
-	nodes: int;
-	forks: int;
-	solutions: int;
-	failures: int;
+    nodes : int;
+    forks : int;
+    fails : int;
+    solutions : int;
 }
 
-let rec calculate_stats space = inspect space |> function
-	| Result _ -> {nodes=1; forks=0; solutions=1; failures=0}
-	| Fail -> {nodes=1; forks=0; solutions=0; failures=1}
+let rec calculate_true_values space = inspect space |> function
+	| Result _ -> {nodes=1; forks=0; solutions=1; fails=0}
+	| Fail -> {nodes=1; forks=0; solutions=0; fails=1}
 	| Fork choices ->
-			let children_stats = List.map calculate_stats choices in
+			let children_stats = List.map calculate_true_values choices in
 			let nodes = 1 + List.fold_left (fun acc s -> acc + s.nodes) 0 children_stats in
 			let forks = 1 + List.fold_left (fun acc s -> acc + s.forks) 0 children_stats in
 			let solutions = List.fold_left (fun acc s -> acc + s.solutions) 0 children_stats in
-			let failures = List.fold_left (fun acc s -> acc + s.failures) 0 children_stats in
-			{nodes; forks; solutions; failures}
+			let fails = List.fold_left (fun acc s -> acc + s.fails) 0 children_stats in
+			{nodes; forks; solutions; fails}
 
 let sums_div7 =
 	let* n1 = int_range 1 4 in
@@ -304,10 +304,10 @@ let estimate ?(selector=undersampled_selector) n_trials (space : 'a Searchspace.
 	}
 
 let%expect_test "estimate number of nodes" =
-	let true_values = calculate_stats sums_div7 in
+	let true_values = calculate_true_values sums_div7 in
 	Printf.printf "True values\n";
 	Printf.printf "  number of nodes: %d\n" true_values.nodes;
-	Printf.printf "  number of fails: %d\n" true_values.failures;
+	Printf.printf "  number of fails: %d\n" true_values.fails;
 	Printf.printf "  number of solutions: %d\n" true_values.solutions;
 	Printf.printf "\n";
 	let estimates = estimate 1000 sums_div7 in
@@ -342,22 +342,22 @@ let rec balanced_range start stop =
 
 let%expect_test "undersampling larger balanced searchspace" =
 	let int_range = balanced_range in
-	let left_heavy_space = (
+	let right_heavy_space = (
 		let* n1 = int_range 1 100 in
 		let* n2 = int_range 1 100 in
 		let sum = return (n1 + n2) in 
 		sum |?> (fun x -> x mod 7 = 0)
 	) in
-		let true_values = calculate_stats left_heavy_space in
+		let true_values = calculate_true_values right_heavy_space in
 		Printf.printf "True values\n";
 		Printf.printf "  number of nodes: %d\n" true_values.nodes;
-		Printf.printf "  number of fails: %d\n" true_values.failures;
+		Printf.printf "  number of fails: %d\n" true_values.fails;
 		Printf.printf "  number of solutions: %d\n" true_values.solutions;
 		Printf.printf "\n";
 		for samplers = 1 to 5 do
 			let samples = 1000 * samplers in
 			Printf.printf "Sample run %d:\n" samples;
-			let estimates = estimate samples left_heavy_space in
+			let estimates = estimate samples right_heavy_space in
 			Printf.printf "Estimated values balanced trees:\n";
 			Printf.printf "  materialized nodes: %d\n" estimates.materialized_nodes;
 			Printf.printf "  number of nodes: %d\n" (int_of_float (estimates.nodes +. 0.5));
@@ -409,22 +409,22 @@ let%expect_test "undersampling larger balanced searchspace" =
 
 
 let%expect_test "undersampling larger unbalanced searchspace" =
-	let left_heavy_space = (
+	let right_heavy_space = (
 		let* n1 = int_range 1 100 in
 		let* n2 = int_range 1 100 in
 		let sum = return (n1 + n2) in 
 		sum |?> (fun x -> x mod 7 = 0)
 	) in
-		let true_values = calculate_stats left_heavy_space in
+		let true_values = calculate_true_values right_heavy_space in
 		Printf.printf "True values\n";
 		Printf.printf "  number of nodes: %d\n" true_values.nodes;
-		Printf.printf "  number of fails: %d\n" true_values.failures;
+		Printf.printf "  number of fails: %d\n" true_values.fails;
 		Printf.printf "  number of solutions: %d\n" true_values.solutions;
 		Printf.printf "\n";
 		for samplers = 1 to 5 do
 			let samples = 1000 * samplers in
 			Printf.printf "Sample run %d:\n" samples;
-			let estimates = estimate samples left_heavy_space in
+			let estimates = estimate samples right_heavy_space in
 			Printf.printf "Estimated values (unbalanced trees):\n";
 			Printf.printf "  materialized nodes: %d\n" estimates.materialized_nodes;
 			Printf.printf "  number of nodes: %d\n" (int_of_float (estimates.nodes +. 0.5));
@@ -473,3 +473,93 @@ let%expect_test "undersampling larger unbalanced searchspace" =
      number of fails: 4370
      number of solutions: 724
    |}]
+
+(** Incremental estimator API implementation *)
+type 'a t = {
+	root : 'a node;
+	selector : 'a child_selector;
+}
+
+let create ?(selector=undersampled_selector) (space : 'a Searchspace.t) : 'a t =
+	{ root = create_node space; selector }
+
+let sample n (est : 'a t) : unit =
+	for _ = 1 to n do
+		walk est.selector est.root
+	done
+
+let estimates (est : 'a t) : estimates =
+	{
+		nodes = est.root.nodes_estimate;
+		fails = est.root.fail_estimate;
+		solutions = est.root.solution_estimate;
+		materialized_nodes = count_materialized_nodes est.root;
+	}
+
+let%expect_test "incremental estimator API on unbalanced searchspace" =
+  let right_heavy_space = (
+    let* n1 = int_range 1 100 in
+    let* n2 = int_range 1 100 in
+    let sum = return (n1 + n2) in
+    sum |?> (fun x -> x mod 7 = 0)
+  ) in
+  let true_values = calculate_true_values right_heavy_space in
+  Printf.printf "True values\n";
+  Printf.printf "  number of nodes: %d\n" true_values.nodes;
+  Printf.printf "  number of fails: %d\n" true_values.fails;
+  Printf.printf "  number of solutions: %d\n" true_values.solutions;
+  Printf.printf "\n";
+  let est = create right_heavy_space in
+  for samplers = 1 to 5 do
+    let samples = 1000 * samplers in
+    sample 1000 est;
+    Printf.printf "Sample run %d:\n" samples;
+    let estimates = estimates est in
+    Printf.printf "Estimated values (incremental):\n";
+    Printf.printf "  materialized nodes: %d\n" estimates.materialized_nodes;
+    Printf.printf "  number of nodes: %d\n" (int_of_float (estimates.nodes +. 0.5));
+    Printf.printf "  number of fails: %d\n" (int_of_float (estimates.fails +. 0.5));
+    Printf.printf "  number of solutions: %d\n" (int_of_float (estimates.solutions +. 0.5));
+    Printf.printf "\n";
+  done;
+  [%expect{|
+    True values
+      number of nodes: 20201
+      number of fails: 8673
+      number of solutions: 1428
+
+    Sample run 1000:
+    Estimated values (incremental):
+      materialized nodes: 2100
+      number of nodes: 2203
+      number of fails: 942
+      number of solutions: 160
+
+    Sample run 2000:
+    Estimated values (incremental):
+      materialized nodes: 4100
+      number of nodes: 4203
+      number of fails: 1800
+      number of solutions: 302
+
+    Sample run 3000:
+    Estimated values (incremental):
+      materialized nodes: 6097
+      number of nodes: 6195
+      number of fails: 2654
+      number of solutions: 444
+
+    Sample run 4000:
+    Estimated values (incremental):
+      materialized nodes: 8096
+      number of nodes: 8193
+      number of fails: 3513
+      number of solutions: 584
+
+    Sample run 5000:
+    Estimated values (incremental):
+      materialized nodes: 10095
+      number of nodes: 10199
+      number of fails: 4384
+      number of solutions: 716
+    |}]

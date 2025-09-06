@@ -1184,3 +1184,610 @@ let%expect_test "load from save" =
     ........
     ........
     ........ |}]
+
+let to_string p =
+  let buf = Buffer.create 128 in
+  let fmt = Format.formatter_of_buffer buf in
+  save_fmt fmt p;
+  Format.pp_print_flush fmt ();
+  Buffer.contents buf
+
+let%expect_test "print classic pentomino" =
+  let puz = classic_no_symmetric_solutions in
+  Printf.printf "%s\n" (to_string puz);
+  [%expect{|
+    A:
+    #####
+
+    #
+    #
+    #
+    #
+    #
+
+
+    B:
+    ####
+    #...
+
+
+    C:
+    ####
+    .#..
+
+    ####
+    ..#.
+
+    #.
+    ##
+    #.
+    #.
+
+    #.
+    #.
+    ##
+    #.
+
+    .#..
+    ####
+
+    .#
+    ##
+    .#
+    .#
+
+    .#
+    .#
+    ##
+    .#
+
+    ..#.
+    ####
+
+
+    D:
+    ###
+    ##.
+
+    ###
+    .##
+
+    ##.
+    ###
+
+    ##
+    ##
+    #.
+
+    ##
+    ##
+    .#
+
+    #.
+    ##
+    ##
+
+    .##
+    ###
+
+    .#
+    ##
+    ##
+
+
+    E:
+    ###
+    #.#
+
+    ##
+    #.
+    ##
+
+    ##
+    .#
+    ##
+
+    #.#
+    ###
+
+
+    F:
+    ###
+    #..
+    #..
+
+    ###
+    ..#
+    ..#
+
+    #..
+    #..
+    ###
+
+    ..#
+    ..#
+    ###
+
+
+    G:
+    ###
+    .#.
+    .#.
+
+    #..
+    ###
+    #..
+
+    .#.
+    .#.
+    ###
+
+    ..#
+    ###
+    ..#
+
+
+    H:
+    ###.
+    ..##
+
+    ##..
+    .###
+
+    #.
+    ##
+    .#
+    .#
+
+    #.
+    #.
+    ##
+    .#
+
+    .###
+    ##..
+
+    .#
+    ##
+    #.
+    #.
+
+    .#
+    .#
+    ##
+    #.
+
+    ..##
+    ###.
+
+
+    I:
+    ##.
+    .##
+    .#.
+
+    #..
+    ###
+    .#.
+
+    .##
+    ##.
+    .#.
+
+    .#.
+    ###
+    #..
+
+    .#.
+    ###
+    ..#
+
+    .#.
+    ##.
+    .##
+
+    .#.
+    .##
+    ##.
+
+    ..#
+    ###
+    .#.
+
+
+    J:
+    ##.
+    .##
+    ..#
+
+    #..
+    ##.
+    .##
+
+    .##
+    ##.
+    #..
+
+    ..#
+    .##
+    ##.
+
+
+    K:
+    ##.
+    .#.
+    .##
+
+    #..
+    ###
+    ..#
+
+    .##
+    .#.
+    ##.
+
+    ..#
+    ###
+    #..
+
+
+    L:
+    .#.
+    ###
+    .#.
+
+
+    ---
+    ........
+    ........
+    ........
+    ...##...
+    ...##...
+    ........
+    ........
+    ........
+    |}]
+
+let hash puzzle =
+  let puzzle_string = to_string puzzle in
+  Digest.string puzzle_string |> Digest.to_hex    
+
+let calculate_true_values = Cache.memoize
+  ~cache_dir:"/tmp/no-sandbox-cache" 
+  ~function_name:"caluclate_true_values"
+  ~hash:hash
+  (fun puzzle -> solve puzzle |> Stochastic_estimator.calculate_true_values)
+
+let%expect_test "estimate classic pentomino" =
+  let puz = classic_no_symmetric_solutions in
+  let searchspace = solve puz in
+  Printf.printf "%s\n" (Board.to_string (puz.board));
+  let true_values = calculate_true_values puz in
+  Printf.printf "True values:\n";
+  Printf.printf "   Nodes: %d\n" true_values.nodes;
+  Printf.printf "   Solutions: %d\n" true_values.solutions;
+  Printf.printf "   Fails: %d\n\n" true_values.fails;
+  let est = Stochastic_estimator.create searchspace in
+  let samples_per_iter = 2000 in
+  let prev_nodes = ref 0.0 in
+  let total_samples = ref 0 in
+  let percent_change = ref 100.0 in
+  let small_percent_change = 1.0 in
+  while !percent_change > small_percent_change do
+    Stochastic_estimator.sample samples_per_iter est;
+    total_samples := !total_samples + samples_per_iter;
+    let estimates = Stochastic_estimator.estimates est in
+    percent_change :=
+      if !prev_nodes = 0.0 then 100.0
+      else abs_float (estimates.nodes -. !prev_nodes) /. !prev_nodes *. 100.0;
+    Printf.printf "Estimates with %d samples:\n" !total_samples;
+    Printf.printf "   Nodes: %d\n" (Int.of_float (estimates.nodes+.0.5));
+    Printf.printf "   Solutions: %.2f\n" estimates.solutions;
+    Printf.printf "   Fails: %d\n" (Int.of_float (estimates.fails+.0.5));
+    Printf.printf "   Change in nodes: %.2f%%\n" !percent_change;
+    Printf.printf "\n";
+    prev_nodes := estimates.nodes;
+  done;
+  [%expect{|
+    ........
+    ........
+    ........
+    ...##...
+    ...##...
+    ........
+    ........
+    ........
+
+    True values:
+       Nodes: 306487
+       Solutions: 65
+       Fails: 234622
+
+    Estimates with 2000 samples:
+       Nodes: 59464
+       Solutions: 0.00
+       Fails: 46977
+       Change in nodes: 100.00%
+
+    Estimates with 4000 samples:
+       Nodes: 60068
+       Solutions: 0.00
+       Fails: 47677
+       Change in nodes: 1.02%
+
+    Estimates with 6000 samples:
+       Nodes: 67742
+       Solutions: 0.00
+       Fails: 53749
+       Change in nodes: 12.78%
+
+    Estimates with 8000 samples:
+       Nodes: 72903
+       Solutions: 0.00
+       Fails: 57868
+       Change in nodes: 7.62%
+
+    Estimates with 10000 samples:
+       Nodes: 79828
+       Solutions: 0.00
+       Fails: 63308
+       Change in nodes: 9.50%
+
+    Estimates with 12000 samples:
+       Nodes: 85637
+       Solutions: 24.20
+       Fails: 67898
+       Change in nodes: 7.28%
+
+    Estimates with 14000 samples:
+       Nodes: 91280
+       Solutions: 20.17
+       Fails: 72387
+       Change in nodes: 6.59%
+
+    Estimates with 16000 samples:
+       Nodes: 95441
+       Solutions: 20.17
+       Fails: 75632
+       Change in nodes: 4.56%
+
+    Estimates with 18000 samples:
+       Nodes: 99946
+       Solutions: 17.29
+       Fails: 79121
+       Change in nodes: 4.72%
+
+    Estimates with 20000 samples:
+       Nodes: 104045
+       Solutions: 17.29
+       Fails: 82380
+       Change in nodes: 4.10%
+
+    Estimates with 22000 samples:
+       Nodes: 108135
+       Solutions: 17.29
+       Fails: 85618
+       Change in nodes: 3.93%
+
+    Estimates with 24000 samples:
+       Nodes: 111908
+       Solutions: 17.29
+       Fails: 88585
+       Change in nodes: 3.49%
+
+    Estimates with 26000 samples:
+       Nodes: 115898
+       Solutions: 17.29
+       Fails: 91744
+       Change in nodes: 3.57%
+
+    Estimates with 28000 samples:
+       Nodes: 119470
+       Solutions: 17.29
+       Fails: 94500
+       Change in nodes: 3.08%
+
+    Estimates with 30000 samples:
+       Nodes: 122925
+       Solutions: 15.10
+       Fails: 97181
+       Change in nodes: 2.89%
+
+    Estimates with 32000 samples:
+       Nodes: 127535
+       Solutions: 15.10
+       Fails: 100688
+       Change in nodes: 3.75%
+
+    Estimates with 34000 samples:
+       Nodes: 131161
+       Solutions: 15.10
+       Fails: 103563
+       Change in nodes: 2.84%
+
+    Estimates with 36000 samples:
+       Nodes: 135525
+       Solutions: 15.10
+       Fails: 106962
+       Change in nodes: 3.33%
+
+    Estimates with 38000 samples:
+       Nodes: 139132
+       Solutions: 14.00
+       Fails: 109696
+       Change in nodes: 2.66%
+
+    Estimates with 40000 samples:
+       Nodes: 142563
+       Solutions: 18.00
+       Fails: 112331
+       Change in nodes: 2.47%
+
+    Estimates with 42000 samples:
+       Nodes: 145584
+       Solutions: 18.00
+       Fails: 114670
+       Change in nodes: 2.12%
+
+    Estimates with 44000 samples:
+       Nodes: 149050
+       Solutions: 18.00
+       Fails: 117346
+       Change in nodes: 2.38%
+
+    Estimates with 46000 samples:
+       Nodes: 152788
+       Solutions: 18.00
+       Fails: 120231
+       Change in nodes: 2.51%
+
+    Estimates with 48000 samples:
+       Nodes: 155610
+       Solutions: 25.85
+       Fails: 122421
+       Change in nodes: 1.85%
+
+    Estimates with 50000 samples:
+       Nodes: 158487
+       Solutions: 25.85
+       Fails: 124636
+       Change in nodes: 1.85%
+
+    Estimates with 52000 samples:
+       Nodes: 160944
+       Solutions: 25.85
+       Fails: 126550
+       Change in nodes: 1.55%
+
+    Estimates with 54000 samples:
+       Nodes: 163702
+       Solutions: 33.85
+       Fails: 128656
+       Change in nodes: 1.71%
+
+    Estimates with 56000 samples:
+       Nodes: 166126
+       Solutions: 31.85
+       Fails: 130560
+       Change in nodes: 1.48%
+
+    Estimates with 58000 samples:
+       Nodes: 168962
+       Solutions: 26.35
+       Fails: 132725
+       Change in nodes: 1.71%
+
+    Estimates with 60000 samples:
+       Nodes: 172266
+       Solutions: 25.42
+       Fails: 135269
+       Change in nodes: 1.96%
+
+    Estimates with 62000 samples:
+       Nodes: 174915
+       Solutions: 23.58
+       Fails: 137320
+       Change in nodes: 1.54%
+
+    Estimates with 64000 samples:
+       Nodes: 177546
+       Solutions: 23.58
+       Fails: 139306
+       Change in nodes: 1.50%
+
+    Estimates with 66000 samples:
+       Nodes: 180369
+       Solutions: 23.58
+       Fails: 141462
+       Change in nodes: 1.59%
+
+    Estimates with 68000 samples:
+       Nodes: 183257
+       Solutions: 23.13
+       Fails: 143654
+       Change in nodes: 1.60%
+
+    Estimates with 70000 samples:
+       Nodes: 186015
+       Solutions: 23.13
+       Fails: 145738
+       Change in nodes: 1.51%
+
+    Estimates with 72000 samples:
+       Nodes: 188583
+       Solutions: 30.63
+       Fails: 147692
+       Change in nodes: 1.38%
+
+    Estimates with 74000 samples:
+       Nodes: 190887
+       Solutions: 27.63
+       Fails: 149451
+       Change in nodes: 1.22%
+
+    Estimates with 76000 samples:
+       Nodes: 193234
+       Solutions: 30.63
+       Fails: 151228
+       Change in nodes: 1.23%
+
+    Estimates with 78000 samples:
+       Nodes: 195607
+       Solutions: 29.13
+       Fails: 153028
+       Change in nodes: 1.23%
+
+    Estimates with 80000 samples:
+       Nodes: 198057
+       Solutions: 29.13
+       Fails: 154935
+       Change in nodes: 1.25%
+
+    Estimates with 82000 samples:
+       Nodes: 200690
+       Solutions: 29.13
+       Fails: 156902
+       Change in nodes: 1.33%
+
+    Estimates with 84000 samples:
+       Nodes: 203538
+       Solutions: 29.13
+       Fails: 159059
+       Change in nodes: 1.42%
+
+    Estimates with 86000 samples:
+       Nodes: 205619
+       Solutions: 28.83
+       Fails: 160629
+       Change in nodes: 1.02%
+
+    Estimates with 88000 samples:
+       Nodes: 207904
+       Solutions: 31.83
+       Fails: 162357
+       Change in nodes: 1.11%
+
+    Estimates with 90000 samples:
+       Nodes: 210110
+       Solutions: 28.67
+       Fails: 164023
+       Change in nodes: 1.06%
+
+    Estimates with 92000 samples:
+       Nodes: 212877
+       Solutions: 27.67
+       Fails: 166102
+       Change in nodes: 1.32%
+
+    Estimates with 94000 samples:
+       Nodes: 215140
+       Solutions: 30.75
+       Fails: 167828
+       Change in nodes: 1.06%
+
+    Estimates with 96000 samples:
+       Nodes: 217151
+       Solutions: 29.42
+       Fails: 169350
+       Change in nodes: 0.93%
+    |}]

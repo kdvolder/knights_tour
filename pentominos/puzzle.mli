@@ -31,6 +31,9 @@ val save : out_channel -> t -> unit
     but it can also be used to restore a puzzle via the [load] function.*)
 val save_fmt : Format.formatter -> t -> unit
 
+(** Convert a puzzle to a string using the same format as [save_fmt]. *)
+val to_string : t -> string
+
 (** Load a puzzle from a textual representation as produced by [save].*)
 val load : in_channel -> t
 
