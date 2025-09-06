@@ -341,7 +341,6 @@ let rec balanced_range start stop =
 		balanced_range start mid ++ balanced_range (mid + 1) stop
 
 let%expect_test "undersampling larger balanced searchspace" =
-	let open Searchspace in
 	let int_range = balanced_range in
 	let left_heavy_space = (
 		let* n1 = int_range 1 100 in
@@ -410,8 +409,6 @@ let%expect_test "undersampling larger balanced searchspace" =
 
 
 let%expect_test "undersampling larger unbalanced searchspace" =
-	let open Searchspace in
-	(* let int_range = balanced_range in *)
 	let left_heavy_space = (
 		let* n1 = int_range 1 100 in
 		let* n2 = int_range 1 100 in
