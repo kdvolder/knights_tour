@@ -328,8 +328,88 @@ let%expect_test "estimate number of nodes" =
      number of fails: 22
      number of solutions: 3
    |}]
-	
-let%expect_test "undersampling larger searchspace" =
+
+let rec balanced_range start stop =
+	if start > stop then
+		empty
+	else if start = stop then
+		return start
+	else if start + 1 = stop then
+		return start ++ return stop
+	else
+		let mid = (start + stop) / 2 in
+		balanced_range start mid ++ balanced_range (mid + 1) stop
+
+let%expect_test "undersampling larger balanced searchspace" =
+	let open Searchspace in
+	let int_range = balanced_range in
+	let left_heavy_space = (
+		let* n1 = int_range 1 100 in
+		let* n2 = int_range 1 100 in
+		let sum = return (n1 + n2) in 
+		sum |?> (fun x -> x mod 7 = 0)
+	) in
+		let true_values = calculate_stats left_heavy_space in
+		Printf.printf "True values\n";
+		Printf.printf "  number of nodes: %d\n" true_values.nodes;
+		Printf.printf "  number of fails: %d\n" true_values.failures;
+		Printf.printf "  number of solutions: %d\n" true_values.solutions;
+		Printf.printf "\n";
+		for samplers = 1 to 5 do
+			let samples = 1000 * samplers in
+			Printf.printf "Sample run %d:\n" samples;
+			let estimates = estimate samples left_heavy_space in
+			Printf.printf "Estimated values balanced trees:\n";
+			Printf.printf "  materialized nodes: %d\n" estimates.materialized_nodes;
+			Printf.printf "  number of nodes: %d\n" (int_of_float (estimates.nodes +. 0.5));
+			Printf.printf "  number of fails: %d\n" (int_of_float (estimates.fails +. 0.5));
+			Printf.printf "  number of solutions: %d\n" (int_of_float (estimates.solutions +. 0.5));
+			Printf.printf "\n";
+		done;
+	[%expect{|
+   True values
+     number of nodes: 19999
+     number of fails: 8572
+     number of solutions: 1428
+
+   Sample run 1000:
+   Estimated values balanced trees:
+     materialized nodes: 5143
+     number of nodes: 19015
+     number of fails: 7992
+     number of solutions: 1516
+
+   Sample run 2000:
+   Estimated values balanced trees:
+     materialized nodes: 8273
+     number of nodes: 18967
+     number of fails: 8092
+     number of solutions: 1392
+
+   Sample run 3000:
+   Estimated values balanced trees:
+     materialized nodes: 10377
+     number of nodes: 18077
+     number of fails: 7666
+     number of solutions: 1373
+
+   Sample run 4000:
+   Estimated values balanced trees:
+     materialized nodes: 12221
+     number of nodes: 18287
+     number of fails: 7830
+     number of solutions: 1314
+
+   Sample run 5000:
+   Estimated values balanced trees:
+     materialized nodes: 13595
+     number of nodes: 17327
+     number of fails: 7350
+     number of solutions: 1314
+   |}]
+
+
+let%expect_test "undersampling larger unbalanced searchspace" =
 	let open Searchspace in
 	(* let int_range = balanced_range in *)
 	let left_heavy_space = (
