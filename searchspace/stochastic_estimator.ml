@@ -215,19 +215,19 @@ type 'a child_selector = 'a node -> int
 let uniform_selector node =
 	Random.int (Array.length node.children)
 
+let sample_rate = function
+	| Some child -> float_of_int child.samples /. (child.fail_estimate +. child.solution_estimate)
+	| None -> 0.0
+
 let undersampled_selector (node : 'a node) : int =
 	let n = Array.length node.children in
 	if n = 0 then 0
 	else
-		let sample_rate i =
-			match node.children.(i) with
-			| Some child -> float_of_int child.samples /. child.nodes_estimate
-			| None -> 0.0 (* treat unmaterialized as 0 samples, avg estimate *)
-		in
-		let rates = Array.init n sample_rate in
+		let rates = Array.init n (fun i -> sample_rate node.children.(i)) in
 		let min_rate = Array.fold_left min rates.(0) rates in
 		let candidates = List.filter (fun i -> abs_float (rates.(i) -. min_rate) < 1e-8) (List.init n Fun.id) in
 	List.nth candidates (Random.int (List.length candidates))
+
 
 let weighted_selector (node : 'a node) : int =
 	let n = Array.length node.children in
