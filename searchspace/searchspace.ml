@@ -232,26 +232,30 @@ let%expect_test "breadth_search" =
 
 let rec pp_decision_tree pp_element out = 
   Format.(function
-  | Result r -> fprintf out "@[%a@]" pp_element r
-  | Fork choices -> 
-      if StaQue.is_empty choices then
+  | Result r ->
+      fprintf out "@\n";
+      fprintf out "@[%a@]" pp_element r
+  | Fork choices ->
+      if StaQue.is_empty choices then (
+        fprintf out "@\n";
         fprintf out "FAIL"
-      else if StaQue.size choices==1 then
-        fprintf out "@[%a@]" (pp_decision_tree pp_element) (StaQue.get 0 choices)
-      else
-        fprintf out "@[<v>choices@;<1 3>";
+      ) else if StaQue.size choices = 1 then (
+        fprintf out "@\n";
+        pp_decision_tree pp_element out (StaQue.get 0 choices)
+      ) else (
+        fprintf out "@\n@[<v 2>choices";
         let elements = ref choices in
         while not (StaQue.is_empty !elements) do
-          StaQue.pop !elements |> ( function 
+          StaQue.pop !elements |> function
           | None -> ()
           | Some (top, rest) ->
-              fprintf out "@[%a@]@;<1 3>" (pp_decision_tree pp_element) top;
+              pp_decision_tree pp_element out top;
               elements := rest
-          )
         done;
         fprintf out "@]"
-  | Lazy producer -> producer () |> pp_decision_tree pp_element out
-)
+      )
+  | Lazy producer -> pp_decision_tree pp_element out (producer ())
+  )
 
 let%expect_test "pp_decisions_tree" = begin
   let sums = (
@@ -266,31 +270,32 @@ let%expect_test "pp_decisions_tree" = begin
   let pp = pp_decision_tree (Format.pp_print_string) Format.std_formatter in
   pp sums
   ; [%expect{|
-    choices
-       choices
+      choices
+        choices
           1 + 1 = 2
           choices
-             1 + 2 = 3
-             choices
-                1 + 3 = 4
+            1 + 2 = 3
+            choices
+              1 + 3 = 4
+              FAIL
+        choices
+          choices
+            2 + 1 = 3
+            choices
+              2 + 2 = 4
+              choices
+                2 + 3 = 5
                 FAIL
-       choices
           choices
-             2 + 1 = 3
-             choices
-                2 + 2 = 4
+            choices
+              3 + 1 = 4
+              choices
+                3 + 2 = 5
                 choices
-                   2 + 3 = 5
-                   FAIL
-          choices
-             choices
-                3 + 1 = 4
-                choices
-                   3 + 2 = 5
-                   choices
-                      3 + 3 = 6
-                      FAIL
-             FAIL |}]
+                  3 + 3 = 6
+                  FAIL
+            FAIL
+      |}]
 end
 
 let%expect_test "pp_decisions_tree_of_list_ints" = begin
@@ -304,31 +309,35 @@ let%expect_test "pp_decisions_tree_of_list_ints" = begin
   Format.pp_print_flush Format.std_formatter (); (* ensure output is flushed *)
   [%expect{|
     choices
-       choices
-          1 + 1 = 2
-          1 + 2 = 3
-          1 + 3 = 4
-
-       choices
-          2 + 1 = 3
-          2 + 2 = 4
-          2 + 3 = 5
-
-       choices
-          3 + 1 = 4
-          3 + 2 = 5
-          3 + 3 = 6
+      choices
+        1 + 1 = 2
+        1 + 2 = 3
+        1 + 3 = 4
+      choices
+        2 + 1 = 3
+        2 + 2 = 4
+        2 + 3 = 5
+      choices
+        3 + 1 = 4
+        3 + 2 = 5
+        3 + 3 = 6
     |}]
 end
 
-(* Controlled inspection API *)
 type 'a node_view =
   | Result of 'a
   | Fork of 'a t list
+  | Fail
 
 let rec inspect (space : 'a t) : 'a node_view =
   match space with
   | Result x -> Result x
-  | Fork choices -> Fork (StaQue.to_list choices)
+  | Fork choices ->
+      let choices_list = StaQue.to_list choices in
+      begin match choices_list with
+      | [] -> Fail
+      | [single] -> inspect single
+      | _ -> Fork choices_list
+      end
   | Lazy f -> inspect (f ())
 

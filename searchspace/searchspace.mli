@@ -162,9 +162,13 @@ val nat_pairs : (int * int) t
     in order to detect any duplicates. *)
 val no_dup : ('a -> 'a -> int) -> 'a t -> 'a t
 
+(** print out a pretty decision tree, using indentation to show structure *)
+val pp_decision_tree : (Format.formatter -> 'a -> unit) -> Format.formatter -> 'a t -> unit
+
 (* Controlled inspection API *)
 type 'a node_view =
     | Result of 'a
     | Fork of 'a t list
+    | Fail
 
 val inspect : 'a t -> 'a node_view
