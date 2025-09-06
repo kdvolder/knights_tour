@@ -169,13 +169,6 @@ let sums_div7 =
 	if sum mod 7 = 0 then return (Printf.sprintf "%d + %d = %d" n1 n2 sum)
 	else empty
 
-let%expect_test "calculate_stats" =
-	let stats = calculate_stats sums_div7 in
-		Printf.printf "nodes: %d, forks: %d, solutions: %d, failures: %d\n" stats.nodes stats.forks stats.solutions stats.failures;
-		[%expect{| nodes: 49, forks: 24, solutions: 3, failures: 22 |}]
-
-
-
 type 'a node = {
 		node_view : 'a Searchspace.node_view;           (* Cached inspected view of the searchspace *)
 		mutable children : 'a node option array;        (* Children indexed by decision number; only some may be materialized *)
@@ -217,15 +210,56 @@ let create_node (space : 'a Searchspace.t) : 'a node =
 		solution_estimate;
 	}
 
-let rng = Random.int
-let rec walk (node : 'a node) : unit =
+type 'a child_selector = 'a node -> int
+
+let uniform_selector node =
+	Random.int (Array.length node.children)
+
+let undersampled_selector (node : 'a node) : int =
+	let n = Array.length node.children in
+	if n = 0 then 0
+	else
+		let sample_rate i =
+			match node.children.(i) with
+			| Some child -> float_of_int child.samples /. child.nodes_estimate
+			| None -> 0.0 (* treat unmaterialized as 0 samples, avg estimate *)
+		in
+		let rates = Array.init n sample_rate in
+		let min_rate = Array.fold_left min rates.(0) rates in
+		let candidates = List.filter (fun i -> abs_float (rates.(i) -. min_rate) < 1e-8) (List.init n Fun.id) in
+	List.nth candidates (Random.int (List.length candidates))
+
+let weighted_selector (node : 'a node) : int =
+	let n = Array.length node.children in
+	if n = 0 then 0
+	else
+		let materialized = Array.to_list node.children |> List.filter_map (fun c -> c) in
+		let avg =
+			match materialized with
+			| [] -> 1.0
+			| xs -> List.fold_left ( +. ) 0. (List.map (fun c -> c.nodes_estimate) xs) /. float_of_int (List.length xs)
+		in
+		let weights = Array.init n (fun i ->
+			match node.children.(i) with
+			| Some child -> max child.nodes_estimate 1.0
+			| None -> avg
+		) in
+		let total = Array.fold_left ( +. ) 0.0 weights in
+		let r = Random.float total in
+		let rec pick i acc =
+			if i >= n then n - 1
+			else if acc +. weights.(i) >= r then i
+			else pick (i+1) (acc +. weights.(i))
+		in pick 0 0.0
+
+let rec walk select_child (node : 'a node) : unit =
 	node.samples <- node.samples + 1;
 	match node.node_view with
 	| Fail | Result _ -> ()
 	| Fork choices ->
 		let num_choices = Array.length node.children in
 		if num_choices > 0 then (
-			let chosen = rng num_choices in
+			let chosen = select_child node in
 			let child_node = match node.children.(chosen) with
 			  | Some child -> child
 			  | None ->
@@ -233,7 +267,7 @@ let rec walk (node : 'a node) : unit =
 				  node.children.(chosen) <- Some c;
 				  c
 			in
-			walk child_node;
+			walk select_child child_node;
 			node.nodes_estimate <- 1. +. children_estimate node.children (fun child -> child.nodes_estimate);
 			node.fail_estimate <- children_estimate node.children (fun child -> child.fail_estimate);
 			node.solution_estimate <- children_estimate node.children (fun child -> child.solution_estimate);
@@ -257,10 +291,10 @@ let rec count_materialized_nodes (node : 'a node) : int =
 		) 0 node.children
 	| _ -> 1
 
-let estimate n_trials (space : 'a Searchspace.t) : estimates =
+let estimate ?(selector=undersampled_selector) n_trials (space : 'a Searchspace.t) : estimates =
 	let root = create_node space in
 	for _ = 1 to n_trials do
-		walk root
+		walk selector root
 	done;
 	{
 		nodes = root.nodes_estimate;
@@ -283,28 +317,17 @@ let%expect_test "estimate number of nodes" =
 	Printf.printf "  number of fails: %d\n" (int_of_float (estimates.fails +. 0.5));
 	Printf.printf "  number of solutions: %d\n" (int_of_float (estimates.solutions +. 0.5));
 	[%expect{|
+   True values
+     number of nodes: 49
+     number of fails: 22
+     number of solutions: 3
+
    Estimated
+     materialized nodes: 49
      number of nodes: 49
      number of fails: 22
      number of solutions: 3
    |}]
-
-(* let rec left_heavy_range start stop =
-	if start > stop then empty
-	else
-		left_heavy_range start (stop - 1) ++ return stop *)
-
-(* let rec list_range start stop =
-	if start > stop then []
-	else
-		start::list_range (start+1) stop *)
-
-(* let rec balanced_range start stop =
-	if start > stop then empty
-	else if start = stop then return start
-	else if start = stop - 1 then return start ++ return stop
-	else let mid = (start + stop) / 2 in
-		balanced_range start (mid - 1) ++ balanced_range mid stop *)
 	
 let%expect_test "undersampling larger searchspace" =
 	let open Searchspace in
@@ -321,15 +344,55 @@ let%expect_test "undersampling larger searchspace" =
 		Printf.printf "  number of fails: %d\n" true_values.failures;
 		Printf.printf "  number of solutions: %d\n" true_values.solutions;
 		Printf.printf "\n";
-		for samplers = 1 to 10 do
-			let samples = 5000 * samplers in
+		for samplers = 1 to 5 do
+			let samples = 1000 * samplers in
 			Printf.printf "Sample run %d:\n" samples;
 			let estimates = estimate samples left_heavy_space in
-			Printf.printf "Estimated values (left-heavy):\n";
+			Printf.printf "Estimated values (unbalanced trees):\n";
 			Printf.printf "  materialized nodes: %d\n" estimates.materialized_nodes;
 			Printf.printf "  number of nodes: %d\n" (int_of_float (estimates.nodes +. 0.5));
 			Printf.printf "  number of fails: %d\n" (int_of_float (estimates.fails +. 0.5));
 			Printf.printf "  number of solutions: %d\n" (int_of_float (estimates.solutions +. 0.5));
 			Printf.printf "\n";
 		done;
-	[%expect{| Estimated number of nodes (left-heavy): |}]
+	[%expect{|
+   True values
+     number of nodes: 20201
+     number of fails: 8673
+     number of solutions: 1428
+
+   Sample run 1000:
+   Estimated values (unbalanced trees):
+     materialized nodes: 2100
+     number of nodes: 2203
+     number of fails: 942
+     number of solutions: 160
+
+   Sample run 2000:
+   Estimated values (unbalanced trees):
+     materialized nodes: 4099
+     number of nodes: 4199
+     number of fails: 1800
+     number of solutions: 300
+
+   Sample run 3000:
+   Estimated values (unbalanced trees):
+     materialized nodes: 6097
+     number of nodes: 6195
+     number of fails: 2660
+     number of solutions: 438
+
+   Sample run 4000:
+   Estimated values (unbalanced trees):
+     materialized nodes: 8096
+     number of nodes: 8193
+     number of fails: 3511
+     number of solutions: 586
+
+   Sample run 5000:
+   Estimated values (unbalanced trees):
+     materialized nodes: 10093
+     number of nodes: 10187
+     number of fails: 4370
+     number of solutions: 724
+   |}]
