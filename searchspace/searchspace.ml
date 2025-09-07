@@ -57,14 +57,14 @@ type 'a search_fun = 'a t -> ('a * 'a t) option
 
 let cached_for ~iterations getter =
   let counter = ref 0 in
-  let cache = ref (getter ()) in
+  let cache = ref None in
   fun () -> begin
     counter := !counter + 1;
-    if !counter >= iterations then begin
+    if !counter >= iterations || !cache = None then begin
       counter := 0;
-      cache := getter ()
+      cache := Some (getter ())
     end;
-    !cache
+    !cache |> Option.get
   end
 
 let memfree = cached_for ~iterations:10000 Memfree.mem_free_ratio 
