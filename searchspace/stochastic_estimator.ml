@@ -66,7 +66,8 @@ let%expect_test "random_walk" = begin
 		Printf.printf "Always last: ";
 		do_test (fun bound -> bound-1)
 	)
-	; [%expect{|Always first: [0/2, 0/2] => Found: 1 + 1 = 2
+	; [%expect{|
+		Always first: [0/2, 0/2] => Found: 1 + 1 = 2
 		Random: [0/2, 0/2] => Found: 1 + 1 = 2
 		Random: [1/2, 0/2, 0/2] => Found: 2 + 1 = 3
 		Random: [0/2, 0/2] => Found: 1 + 1 = 2
