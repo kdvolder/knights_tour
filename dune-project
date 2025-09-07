@@ -1,6 +1,6 @@
 (lang dune 3.1)
 (name knights_tour)
-(version 0.0.7)
+(version 0.0.6)
 
 (generate_opam_files true)
 

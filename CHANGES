@@ -1,20 +1,21 @@
-## v0.0.6 (TBD)
+## v0.0.6 (2025-09-07)
 
-Added a `--graphics` commandline option to `solve_file`. By default
-`solve_file` now only produces textual output suitable for running
-in a headless environment.
-
-Made `solve_file` aware of OS memory availability and adapt to it so
-it adjusts its 'breadth limit' dynamically based on it. (It will tend
-towards more depts searhching as amount of available memory shrinks).
-Thus we can avoid running out of memory on the host machine no
-matter how long we let the process run.
-
-Implemented an alternative to `Treequence`` called `Dlist``. The `Dlist``
-implements the exact same interface as `Treequence` but it may be
-more peformant when switching back and forth between using the `Dlist` 
-as a Queue or a Stack. To confirm this we should do some kind of 
-performance test (which has not been done yet).
+- Added a new `collections` library with modules: `Clist`, `Dlist`, `Treequence`, `Persist`, and utilities. `Dlist` and `Treequence` now implement the same interface for flexible queue/stack usage.
+- Introduced a stochastic estimator for searchspace exploration. This allows estimating characteristics of the searchspace,
+  such as the number of decision nodes, solutions, and failing nodes, by random sampling.
+- Added a new UI (`solve_file_ui`) with a React client and Express server for real-time monitoring, stats, and heatmap visualization.
+- Improved `solve_file`:
+	- Added `--graphics` commandline option.
+	- Now adapts to OS memory availability, dynamically adjusting breadth limit to avoid running out of memory.
+	- Refactored argument parsing and code structure.
+- Major improvements and refactoring in `searchspace`:
+	- Added `stochastic_estimator` module.
+	- Improved modularization and code reuse.
+- Enhanced pentominos and knights_tour modules:
+	- New and improved board, pointSet, puzzle, and cache implementations.
+	- Better modularization for code reuse.
+- Documentation updates and improved docs structure.
+- Various bug fixes, code cleanups, and performance tweaks throughout the codebase.
 
 ## v0.0.5 (2023-09-13)
 
