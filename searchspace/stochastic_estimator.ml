@@ -374,37 +374,37 @@ let%expect_test "undersampling larger balanced searchspace" =
    Sample run 1000:
    Estimated values balanced trees:
      materialized nodes: 5143
-     number of nodes: 19015
-     number of fails: 7992
-     number of solutions: 1516
+     number of nodes: 19007
+     number of fails: 8228
+     number of solutions: 1276
 
    Sample run 2000:
    Estimated values balanced trees:
-     materialized nodes: 8273
-     number of nodes: 18967
-     number of fails: 8092
-     number of solutions: 1392
+     materialized nodes: 8301
+     number of nodes: 19187
+     number of fails: 8278
+     number of solutions: 1316
 
    Sample run 3000:
    Estimated values balanced trees:
-     materialized nodes: 10377
-     number of nodes: 18077
-     number of fails: 7666
-     number of solutions: 1373
+     materialized nodes: 10568
+     number of nodes: 18661
+     number of fails: 8013
+     number of solutions: 1318
 
    Sample run 4000:
    Estimated values balanced trees:
-     materialized nodes: 12221
-     number of nodes: 18287
-     number of fails: 7830
-     number of solutions: 1314
+     materialized nodes: 12268
+     number of nodes: 18439
+     number of fails: 7984
+     number of solutions: 1236
 
    Sample run 5000:
    Estimated values balanced trees:
-     materialized nodes: 13595
-     number of nodes: 17327
-     number of fails: 7350
-     number of solutions: 1314
+     materialized nodes: 13598
+     number of nodes: 17291
+     number of fails: 7448
+     number of solutions: 1198
    |}]
 
 
@@ -440,38 +440,38 @@ let%expect_test "undersampling larger unbalanced searchspace" =
 
    Sample run 1000:
    Estimated values (unbalanced trees):
-     materialized nodes: 2100
-     number of nodes: 2203
-     number of fails: 942
-     number of solutions: 160
+     materialized nodes: 2099
+     number of nodes: 2199
+     number of fails: 946
+     number of solutions: 154
 
    Sample run 2000:
    Estimated values (unbalanced trees):
-     materialized nodes: 4099
-     number of nodes: 4199
-     number of fails: 1800
-     number of solutions: 300
+     materialized nodes: 4100
+     number of nodes: 4203
+     number of fails: 1798
+     number of solutions: 304
 
    Sample run 3000:
    Estimated values (unbalanced trees):
-     materialized nodes: 6097
-     number of nodes: 6195
-     number of fails: 2660
-     number of solutions: 438
+     materialized nodes: 6100
+     number of nodes: 6203
+     number of fails: 2651
+     number of solutions: 451
 
    Sample run 4000:
    Estimated values (unbalanced trees):
-     materialized nodes: 8096
-     number of nodes: 8193
-     number of fails: 3511
+     materialized nodes: 8099
+     number of nodes: 8199
+     number of fails: 3514
      number of solutions: 586
 
    Sample run 5000:
    Estimated values (unbalanced trees):
-     materialized nodes: 10093
-     number of nodes: 10187
-     number of fails: 4370
-     number of solutions: 724
+     materialized nodes: 10099
+     number of nodes: 10199
+     number of fails: 4378
+     number of solutions: 722
    |}]
 
 (** Incremental estimator API implementation *)
@@ -530,36 +530,36 @@ let%expect_test "incremental estimator API on unbalanced searchspace" =
 
     Sample run 1000:
     Estimated values (incremental):
-      materialized nodes: 2100
-      number of nodes: 2203
-      number of fails: 942
-      number of solutions: 160
+      materialized nodes: 2099
+      number of nodes: 2199
+      number of fails: 946
+      number of solutions: 154
 
     Sample run 2000:
     Estimated values (incremental):
-      materialized nodes: 4100
-      number of nodes: 4203
-      number of fails: 1800
-      number of solutions: 302
+      materialized nodes: 4101
+      number of nodes: 4211
+      number of fails: 1798
+      number of solutions: 308
 
     Sample run 3000:
     Estimated values (incremental):
-      materialized nodes: 6097
-      number of nodes: 6195
-      number of fails: 2654
-      number of solutions: 444
+      materialized nodes: 6099
+      number of nodes: 6199
+      number of fails: 2665
+      number of solutions: 435
 
     Sample run 4000:
     Estimated values (incremental):
-      materialized nodes: 8096
-      number of nodes: 8193
-      number of fails: 3513
-      number of solutions: 584
+      materialized nodes: 8099
+      number of nodes: 8199
+      number of fails: 3515
+      number of solutions: 585
 
     Sample run 5000:
     Estimated values (incremental):
-      materialized nodes: 10095
+      materialized nodes: 10099
       number of nodes: 10199
-      number of fails: 4384
-      number of solutions: 716
+      number of fails: 4372
+      number of solutions: 728
     |}]
