@@ -183,12 +183,14 @@ type 'a node = {
 
 let child_average (children : 'a node option array) (f : 'a node -> float) : float =
 	let materialized = Array.to_list children |> List.filter_map (fun c -> c) in
-	let avg =
-		match materialized with
-		| [] -> 1.0
-		| xs -> List.fold_left ( +. ) 0. (List.map f xs) /. float_of_int (List.length xs)
+
+	let add_weighted_child (acc_value, acc_weight) child =
+		let weight = float_of_int child.samples /.  (child.fail_estimate +. child.solution_estimate) in
+		let value = f child in
+		(acc_value +. value *. weight , weight +. acc_weight)
 	in
-	avg
+	let (weighted_sum, total_weight) = List.fold_left add_weighted_child (0.0, 0.0) materialized in
+	weighted_sum /. total_weight
 
 let children_estimate (children : 'a node option array) (f : 'a node -> float) : float =
 	float_of_int (Array.length children) *. child_average children f
@@ -522,10 +524,14 @@ type 'a t = {
 let create ?(selector=undersampled_selector) (space : 'a Searchspace.t) : 'a t =
 	{ root = create_node space; selector }
 
-let sample n (est : 'a t) : unit =
-	for _ = 1 to n do
-		walk est.selector est.root
-	done
+let sample n (est : 'a t) : bool =
+	let rec loop n =
+		if n <= 0 || est.root.isCompleted then ()
+		else (
+			walk est.selector est.root;
+			loop (n-1)
+		)
+	in loop n; est.root.isCompleted
 
 let estimates (est : 'a t) : estimates =
 	{
@@ -549,9 +555,11 @@ let%expect_test "incremental estimator API on unbalanced searchspace" =
   Printf.printf "  number of solutions: %d\n" true_values.solutions;
   Printf.printf "\n";
   let est = create right_heavy_space in
-  for samplers = 1 to 5 do
-    let samples = 1000 * samplers in
-    sample 1000 est;
+	let completed = ref false in
+	let samplers = ref 1 in
+	while not !completed && !samplers <= 5 do
+    let samples = 1000 * !samplers in
+    completed := sample 1000 est;
     Printf.printf "Sample run %d:\n" samples;
     let estimates = estimates est in
     Printf.printf "Estimated values (incremental):\n";
@@ -560,6 +568,7 @@ let%expect_test "incremental estimator API on unbalanced searchspace" =
     Printf.printf "  number of fails: %d\n" (int_of_float (estimates.fails +. 0.5));
     Printf.printf "  number of solutions: %d\n" (int_of_float (estimates.solutions +. 0.5));
     Printf.printf "\n";
+		samplers := !samplers + 1
   done;
   [%expect{|
     True values

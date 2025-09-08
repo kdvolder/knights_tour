@@ -1474,8 +1474,9 @@ let%expect_test "estimate classic pentomino" =
   let total_samples = ref 0 in
   let percent_change = ref 100.0 in
   let small_percent_change = 5.0 in
+  let space_complete = ref false in
   while !percent_change > small_percent_change do
-    Stochastic_estimator.sample samples_per_iter est;
+    space_complete := Stochastic_estimator.sample samples_per_iter est;
     total_samples := !total_samples + samples_per_iter;
     let estimates = Stochastic_estimator.estimates est in
     percent_change :=

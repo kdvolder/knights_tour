@@ -78,8 +78,9 @@ type 'a t
 val create : ?selector:'a child_selector -> 'a Searchspace.t -> 'a t
 (** [create ?selector searchspace] creates a new incremental estimator for the given search space, optionally using a custom selector. *)
 
-val sample : int -> 'a t -> unit
-(** [sample n est] performs [n] additional samples, updating the estimator's statistics. *)
-
+val sample : int -> 'a t -> bool
+(** [sample n est] performs [n] additional samples, updating the estimator's statistics.
+    Returns [true] if the sampling was complete, meaning the entire search space is completely
+    explored. This means there is no point in doing any more sampling. *)
 val estimates : 'a t -> estimates
 (** [estimates est] returns the current estimates from the estimator. *)
