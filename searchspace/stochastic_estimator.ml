@@ -171,14 +171,15 @@ let sums_div7 =
 	else empty
 
 type 'a node = {
-		node_view : 'a Searchspace.node_view;           (* Cached inspected view of the searchspace *)
-		mutable children : 'a node option array;        (* Children indexed by decision number; only some may be materialized *)
-		mutable samples : int;                          (* Number of samples passing through this node *)
-		mutable nodes_estimate : float;                 (* Current best estimate for subtree size *)
-		mutable fail_estimate : float;                  (* Final estimate for failures in this subtree *)
-		mutable solution_estimate : float;              (* Final estimate for solutions in this subtree *)
+	 node_view : 'a Searchspace.node_view;           (* Cached inspected view of the searchspace *)
+	 mutable isCompleted : bool;										 (* Indicates if the node has been fully explored *)
+	 mutable children : 'a node option array;        (* Children indexed by decision number; only some may be materialized *)
+	 mutable samples : int;                          (* Number of samples passing through this node *)
+	 mutable nodes_estimate : float;                 (* Current best estimate for subtree size *)
+   mutable fail_estimate : float;                  (* Final estimate for failures in this subtree *)
+	 mutable solution_estimate : float;              (* Final estimate for solutions in this subtree *)
+	 mutable materialized_nodes : int;               (* Number of materialized nodes in this subtree *)
 }
-
 
 let child_average (children : 'a node option array) (f : 'a node -> float) : float =
 	let materialized = Array.to_list children |> List.filter_map (fun c -> c) in
@@ -197,19 +198,21 @@ let num_choices node_view = match node_view with
 	| _ -> 0
 
 let create_node (space : 'a Searchspace.t) : 'a node =
-	let node_view = inspect space in
-	let (nodes_estimate, fail_estimate, solution_estimate) = match node_view with
-		| Result _ -> (1.0, 0.0, 1.0)
-		| Fail    -> (1.0, 1.0, 0.0)
-		| Fork _  -> (1.0, 0.0, 0.0) (* initial values for forks, will be updated by sampling *)
-	in {
-		node_view;
-		children = Array.make (num_choices node_view) None;
-		samples = 0;
-		nodes_estimate;
-		fail_estimate;
-		solution_estimate;
-	}
+		let node_view = inspect space in
+		let (nodes_estimate, fail_estimate, solution_estimate, materialized_nodes, isCompleted) = match node_view with
+			| Result _ -> (1.0, 0.0, 1.0, 1, true)
+			| Fail    -> (1.0, 1.0, 0.0, 1, true)
+			| Fork _  -> (1.0, 0.0, 0.0, 1, false) (* initial values for forks, will be updated by sampling *)
+		in {
+			node_view;
+			isCompleted;
+			children = Array.make (num_choices node_view) None;
+			samples = 0;
+			nodes_estimate;
+			fail_estimate;
+			solution_estimate;
+			materialized_nodes;
+		}
 
 type 'a child_selector = 'a node -> int
 
@@ -253,6 +256,44 @@ let weighted_selector (node : 'a node) : int =
 			else pick (i+1) (acc +. weights.(i))
 		in pick 0 0.0
 
+let variance (node : 'a node) : float =
+	let n = Array.length node.children in
+	if n = 0 then 0.0
+	else
+	let materialized =
+		Array.to_list node.children |> List.filter_map (fun c -> c)
+	in
+	let m = List.length materialized in
+	if m < 2 then Float.infinity
+	else
+		let mean = (node.nodes_estimate -. 1.0) /. float_of_int n in
+		List.fold_left (fun acc c -> acc +. (c.nodes_estimate -. mean) ** 2.) 0.0 materialized /. float_of_int m
+
+(* Variance-based selector: chooses child with highest variance in nodes_estimate *)
+let variance_selector (node : 'a node) : int =
+	let n = Array.length node.children in
+	if n = 0 then 0
+	else
+			let unmaterialized = List.filter (fun i -> node.children.(i) = None) (List.init n Fun.id) in
+			if List.length unmaterialized > 0 then
+				List.nth unmaterialized (Random.int (List.length unmaterialized))
+			else
+				(* All children are materialized: select child with highest uncertainty-weighted variance *)
+				let priorities = Array.init n (fun i ->
+					match node.children.(i) with
+					| Some c ->
+						let leaf_estimate = Float.max 1.0 (c.solution_estimate +. c.fail_estimate) in
+	
+						let sample_ratio = min 1.0 (float_of_int c.samples /. leaf_estimate) in
+						let uncertainty = (1.0 -. sample_ratio) ** 2.0 in
+						variance c *. uncertainty
+					| None -> neg_infinity
+				) in
+				let max_priority = Array.fold_left max neg_infinity priorities in
+				let candidates = List.filter (fun i -> priorities.(i) = max_priority) (List.init n Fun.id) in
+				List.nth candidates (Random.int (List.length candidates))
+
+
 let rec walk select_child (node : 'a node) : unit =
 	node.samples <- node.samples + 1;
 	match node.node_view with
@@ -262,16 +303,21 @@ let rec walk select_child (node : 'a node) : unit =
 		if num_choices > 0 then (
 			let chosen = select_child node in
 			let child_node = match node.children.(chosen) with
-			  | Some child -> child
-			  | None ->
-				  let c = create_node (List.nth choices chosen) in
-				  node.children.(chosen) <- Some c;
-				  c
+				| Some child -> child
+				| None ->
+					let c = create_node (List.nth choices chosen) in
+					node.children.(chosen) <- Some c;
+					c
 			in
 			walk select_child child_node;
 			node.nodes_estimate <- 1. +. children_estimate node.children (fun child -> child.nodes_estimate);
 			node.fail_estimate <- children_estimate node.children (fun child -> child.fail_estimate);
 			node.solution_estimate <- children_estimate node.children (fun child -> child.solution_estimate);
+			node.materialized_nodes <- 1 + Array.fold_left (fun acc child_opt -> match child_opt with Some child -> acc + child.materialized_nodes | None -> acc) 0 node.children;
+			(* Update isCompleted: true if all children are materialized and themselves completed *)
+			node.isCompleted <-
+				Array.length node.children > 0 &&
+				Array.for_all (function | Some c -> c.isCompleted | None -> false) node.children;
 		)
 
 
@@ -282,15 +328,7 @@ type estimates = {
 	materialized_nodes : int;
 }
 
-let rec count_materialized_nodes (node : 'a node) : int =
-	match node.node_view with
-	| Fork _ ->
-		1 + Array.fold_left (fun acc child_opt ->
-			match child_opt with
-			| Some child -> acc + count_materialized_nodes child
-			| None -> acc
-		) 0 node.children
-	| _ -> 1
+
 
 let estimate ?(selector=undersampled_selector) n_trials (space : 'a Searchspace.t) : estimates =
 	let root = create_node space in
@@ -301,7 +339,7 @@ let estimate ?(selector=undersampled_selector) n_trials (space : 'a Searchspace.
 		nodes = root.nodes_estimate;
 		fails = root.fail_estimate;
 		solutions = root.solution_estimate;
-		materialized_nodes = count_materialized_nodes root;
+		materialized_nodes = root.materialized_nodes;
 	}
 
 let%expect_test "estimate number of nodes" =
@@ -494,7 +532,7 @@ let estimates (est : 'a t) : estimates =
 		nodes = est.root.nodes_estimate;
 		fails = est.root.fail_estimate;
 		solutions = est.root.solution_estimate;
-		materialized_nodes = count_materialized_nodes est.root;
+		materialized_nodes = est.root.materialized_nodes;
 	}
 
 let%expect_test "incremental estimator API on unbalanced searchspace" =
