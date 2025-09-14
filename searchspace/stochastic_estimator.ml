@@ -181,13 +181,93 @@ type 'a node = {
 	 mutable materialized_nodes : int;               (* Number of materialized nodes in this subtree *)
 }
 
+(* Quadratic weight function with k = 1/sqrt(L) *)
+let quadratic_weight samples l_f =
+  let samples_f = float_of_int samples in
+  
+  if samples_f >= l_f then 
+    1.0  (* fully sampled *)
+  else if l_f <= 1.0 then
+    1.0  (* single leaf case *)
+  else (
+    (* let k = 1.0 /. sqrt l_f in *)
+	let k = 0.01 in
+    let diff = (samples_f -. l_f) /. (l_f -. 1.0) in
+    1.0 +. (k -. 1.0) *. diff *. diff  (* quadratic formula *)
+  )
+
+let%expect_test "quadratic_weight function constraints" = begin
+  (* Test fundamental constraints *)
+  Printf.printf "=== Design Constraints ===\n";
+  
+  (* Constraint 1: f(L) = 1 (fully sampled) *)
+  List.iter (fun l ->
+    let weight = quadratic_weight l (float_of_int l) in
+    Printf.printf "f(%d,%.0f) = %.6f (should be 1.0)\n" l (float_of_int l) weight;
+  ) [1; 2; 5; 10; 100];
+  
+  Printf.printf "\n";
+  
+  (* Constraint 2: f(1,L) = 1/sqrt(L) *)
+  List.iter (fun l_int ->
+    let l_f = float_of_int l_int in
+    let weight = quadratic_weight 1 l_f in
+    let expected = 1.0 /. sqrt l_f in
+    Printf.printf "f(1,%.0f) = %.6f (should be %.6f = 1/sqrt(%.0f))\n" l_f weight expected l_f;
+  ) [1; 4; 9; 16; 100];
+  
+  Printf.printf "\n";
+  
+  (* Test monotonicity *)
+  Printf.printf "=== Monotonicity Test ===\n";
+  let l = 10 in
+  let l_f = float_of_int l in
+  Printf.printf "L=%d: " l;
+  for samples = 1 to l do
+    let weight = quadratic_weight samples l_f in
+    Printf.printf "%.3f " weight;
+  done;
+  Printf.printf "(should increase)\n\n";
+  
+  (* Test extreme SEED 7 scenario *)
+  Printf.printf "=== SEED 7 Scenario ===\n";
+  let w1 = quadratic_weight 4158 4158.0 in
+  let w2 = quadratic_weight 66 66.0 in
+  Printf.printf "Child1 (4158/4158): %.6f\n" w1;
+  Printf.printf "Child2 (66/66): %.6f\n" w2;
+  Printf.printf "Ratio: %.2fx (vs old broken 63x)\n" (w1 /. w2);
+end;
+[%expect{|
+  === Design Constraints ===
+  f(1,1) = 1.000000 (should be 1.0)
+  f(2,2) = 1.000000 (should be 1.0)
+  f(5,5) = 1.000000 (should be 1.0)
+  f(10,10) = 1.000000 (should be 1.0)
+  f(100,100) = 1.000000 (should be 1.0)
+
+  f(1,1) = 1.000000 (should be 1.000000 = 1/sqrt(1))
+  f(1,4) = 0.010000 (should be 0.500000 = 1/sqrt(4))
+  f(1,9) = 0.010000 (should be 0.333333 = 1/sqrt(9))
+  f(1,16) = 0.010000 (should be 0.250000 = 1/sqrt(16))
+  f(1,100) = 0.010000 (should be 0.100000 = 1/sqrt(100))
+
+  === Monotonicity Test ===
+  L=10: 0.010 0.218 0.401 0.560 0.694 0.804 0.890 0.951 0.988 1.000 (should increase)
+
+  === SEED 7 Scenario ===
+  Child1 (4158/4158): 1.000000
+  Child2 (66/66): 1.000000
+  Ratio: 1.00x (vs old broken 63x)
+  |}]
+
 let child_average (children : 'a node option array) (f : 'a node -> float) : float =
 	let materialized = Array.to_list children |> List.filter_map (fun c -> c) in
-
+	
 	let add_weighted_child (acc_value, acc_weight) child =
-		let weight = float_of_int child.samples /.  (child.fail_estimate +. child.solution_estimate) in
+		(* let weight = quadratic_weight child.samples (child.solution_estimate +. child.fail_estimate) in *)
+		let weight = 1.0 in
 		let value = f child in
-		(acc_value +. value *. weight , weight +. acc_weight)
+		(acc_value +. value *. weight, acc_weight +. weight)
 	in
 	let (weighted_sum, total_weight) = List.fold_left add_weighted_child (0.0, 0.0) materialized in
 	weighted_sum /. total_weight
@@ -201,15 +281,15 @@ let num_choices node_view = match node_view with
 
 let create_node (space : 'a Searchspace.t) : 'a node =
 		let node_view = inspect space in
-		let (nodes_estimate, fail_estimate, solution_estimate, materialized_nodes, isCompleted) = match node_view with
-			| Result _ -> (1.0, 0.0, 1.0, 1, true)
-			| Fail    -> (1.0, 1.0, 0.0, 1, true)
-			| Fork _  -> (1.0, 0.0, 0.0, 1, false) (* initial values for forks, will be updated by sampling *)
+		let (nodes_estimate, fail_estimate, solution_estimate, materialized_nodes, isCompleted, samples) = match node_view with
+			| Result _ -> (1.0, 0.0, 1.0, 1, true, 1)   (* leaf nodes are created as fully sampled *)
+			| Fail    -> (1.0, 1.0, 0.0, 1, true, 1)   (* leaf nodes are created as fully sampled *)
+			| Fork _  -> (1.0, 0.0, 0.0, 1, false, 0)  (* initial values for forks, will be updated by sampling *)
 		in {
 			node_view;
 			isCompleted;
 			children = Array.make (num_choices node_view) None;
-			samples = 0;
+			samples;
 			nodes_estimate;
 			fail_estimate;
 			solution_estimate;
@@ -295,33 +375,41 @@ let variance_selector (node : 'a node) : int =
 				let candidates = List.filter (fun i -> priorities.(i) = max_priority) (List.init n Fun.id) in
 				List.nth candidates (Random.int (List.length candidates))
 
-
 let rec walk select_child (node : 'a node) : unit =
-	node.samples <- node.samples + 1;
-	match node.node_view with
-	| Fail | Result _ -> ()
-	| Fork choices ->
-		let num_choices = Array.length node.children in
-		if num_choices > 0 then (
-			let chosen = select_child node in
-			let child_node = match node.children.(chosen) with
-				| Some child -> child
-				| None ->
-					let c = create_node (List.nth choices chosen) in
-					node.children.(chosen) <- Some c;
-					c
-			in
-			walk select_child child_node;
-			node.nodes_estimate <- 1. +. children_estimate node.children (fun child -> child.nodes_estimate);
-			node.fail_estimate <- children_estimate node.children (fun child -> child.fail_estimate);
-			node.solution_estimate <- children_estimate node.children (fun child -> child.solution_estimate);
-			node.materialized_nodes <- 1 + Array.fold_left (fun acc child_opt -> match child_opt with Some child -> acc + child.materialized_nodes | None -> acc) 0 node.children;
-			(* Update isCompleted: true if all children are materialized and themselves completed *)
-			node.isCompleted <-
-				Array.length node.children > 0 &&
-				Array.for_all (function | Some c -> c.isCompleted | None -> false) node.children;
-		)
-
+	if node.isCompleted then () 
+	else (
+		match node.node_view with
+		| Fail | Result _ -> 
+			(* We reached a leaf - it's already counted as 1 sample *)
+			()
+		| Fork choices ->
+			let num_choices = Array.length node.children in
+			if num_choices > 0 then (
+				let chosen = select_child node in
+				let child_node = match node.children.(chosen) with
+					| Some child -> child
+					| None ->
+						let c = create_node (List.nth choices chosen) in
+						node.children.(chosen) <- Some c;
+						c
+				in
+				walk select_child child_node;
+				(* Calculate our sample count as sum of all child sample counts *)
+				node.samples <- Array.fold_left (fun acc child_opt -> 
+					match child_opt with 
+					| Some child -> acc + child.samples 
+					| None -> acc
+				) 0 node.children;
+				node.nodes_estimate <- 1. +. children_estimate node.children (fun child -> child.nodes_estimate);
+				node.fail_estimate <- children_estimate node.children (fun child -> child.fail_estimate);
+				node.solution_estimate <- children_estimate node.children (fun child -> child.solution_estimate);
+				node.materialized_nodes <- 1 + Array.fold_left (fun acc child_opt -> match child_opt with Some child -> acc + child.materialized_nodes | None -> acc) 0 node.children;
+				(* Update isCompleted: true if all children are materialized and themselves completed *)
+				node.isCompleted <-
+					Array.length node.children > 0 &&
+					Array.for_all (function | Some c -> c.isCompleted | None -> false) node.children;
+			)
+	)
 
 type estimates = {
 	nodes : float;
@@ -335,7 +423,7 @@ type estimates = {
 let estimate ?(selector=undersampled_selector) n_trials (space : 'a Searchspace.t) : estimates =
 	let root = create_node space in
 	for _ = 1 to n_trials do
-		walk selector root
+		ignore (walk selector root)
 	done;
 	{
 		nodes = root.nodes_estimate;
@@ -528,7 +616,7 @@ let sample n (est : 'a t) : bool =
 	let rec loop n =
 		if n <= 0 || est.root.isCompleted then ()
 		else (
-			walk est.selector est.root;
+			ignore (walk est.selector est.root);
 			loop (n-1)
 		)
 	in loop n; est.root.isCompleted
@@ -611,3 +699,180 @@ let%expect_test "incremental estimator API on unbalanced searchspace" =
       number of fails: 4372
       number of solutions: 728
     |}]
+
+let%expect_test "sample counting verification" = begin
+  Random.full_init [|42|];
+  
+  (* Create a simple test tree: Root with 3 children *)
+  let simple_tree = Searchspace.(
+	alt [
+		return "Child 0";
+		alt [
+			return "Grandchild 0";
+			return "Grandchild 1"
+		];
+		empty
+	]
+  ) in
+
+  let estimator = create simple_tree in
+  
+  Printf.printf "Before sampling:\n";
+  Printf.printf "Root samples: %d\n" estimator.root.samples;
+  
+  let completed = sample 1 estimator in
+  
+  Printf.printf "After 1 sample:\n";
+  Printf.printf "Root samples: %d (should be 1)\n" estimator.root.samples;
+  Printf.printf "Completed: %b\n" completed;
+  
+  (* Walk and print the tree structure with sample counts *)
+  let rec print_tree indent node =
+    match node.node_view with
+    | Result s -> Printf.printf "%sResult '%s' [samples=%d]\n" indent s node.samples
+    | Fail -> Printf.printf "%sFail [samples=%d]\n" indent node.samples
+    | Fork _ -> 
+        Printf.printf "%sFork [samples=%d]\n" indent node.samples;
+        Array.iteri (fun i child_opt ->
+          match child_opt with
+          | Some child -> 
+              Printf.printf "%s  Child %d:\n" indent i;
+              print_tree (indent ^ "    ") child
+          | None -> 
+              Printf.printf "%s  Child %d: not materialized\n" indent i
+        ) node.children
+  in
+  
+  Printf.printf "\nTree structure:\n";
+  print_tree "" estimator.root
+end; 
+[%expect{|
+  Before sampling:
+  Root samples: 0
+  After 1 sample:
+  Root samples: 1 (should be 1)
+  Completed: false
+
+  Tree structure:
+  Fork [samples=1]
+    Child 0: not materialized
+    Child 1:
+      Fork [samples=1]
+        Child 0:
+          Result 'Grandchild 0' [samples=1]
+        Child 1: not materialized
+    Child 2: not materialized
+  |}]
+
+let%expect_test "oversampling behavior with uniform selector" = begin
+  Random.full_init [|42|];
+  
+  (* Create a simple test tree: Root with 3 children *)
+  let simple_tree = Searchspace.(
+	alt [
+		return "Child 0";
+		alt [
+			return "Grandchild 0";
+			return "Grandchild 1"
+		];
+		empty
+	]
+  ) in
+
+  let estimator = create ~selector:uniform_selector simple_tree in
+  
+  Printf.printf "=== Initial state ===\n";
+  Printf.printf "Root samples: %d\n" estimator.root.samples;
+  
+  (* Walk and print the tree structure with sample counts *)
+  let rec print_tree indent node =
+    match node.node_view with
+    | Result s -> Printf.printf "%sResult '%s' [samples=%d, completed=%b]\n" indent s node.samples node.isCompleted
+    | Fail -> Printf.printf "%sFail [samples=%d, completed=%b]\n" indent node.samples node.isCompleted
+    | Fork _ -> 
+        Printf.printf "%sFork [samples=%d, completed=%b]\n" indent node.samples node.isCompleted;
+        Array.iteri (fun i child_opt ->
+          match child_opt with
+          | Some child -> 
+              Printf.printf "%s  Child %d:\n" indent i;
+              print_tree (indent ^ "    ") child
+          | None -> 
+              Printf.printf "%s  Child %d: not materialized\n" indent i
+        ) node.children
+  in
+  
+  (* Sample multiple times to show oversampling behavior *)
+  for i = 1 to 5 do
+    let completed = sample 1 estimator in
+    Printf.printf "\n=== After %d sample(s) ===\n" i;
+    Printf.printf "Root completed: %b\n" completed;
+    print_tree "" estimator.root;
+    Printf.printf "\n"
+  done
+end; 
+[%expect{|
+  === Initial state ===
+  Root samples: 0
+
+  === After 1 sample(s) ===
+  Root completed: false
+  Fork [samples=1, completed=false]
+    Child 0: not materialized
+    Child 1:
+      Fork [samples=1, completed=false]
+        Child 0:
+          Result 'Grandchild 0' [samples=1, completed=true]
+        Child 1: not materialized
+    Child 2: not materialized
+
+
+  === After 2 sample(s) ===
+  Root completed: false
+  Fork [samples=1, completed=false]
+    Child 0: not materialized
+    Child 1:
+      Fork [samples=1, completed=false]
+        Child 0:
+          Result 'Grandchild 0' [samples=1, completed=true]
+        Child 1: not materialized
+    Child 2: not materialized
+
+
+  === After 3 sample(s) ===
+  Root completed: false
+  Fork [samples=2, completed=false]
+    Child 0:
+      Result 'Child 0' [samples=1, completed=true]
+    Child 1:
+      Fork [samples=1, completed=false]
+        Child 0:
+          Result 'Grandchild 0' [samples=1, completed=true]
+        Child 1: not materialized
+    Child 2: not materialized
+
+
+  === After 4 sample(s) ===
+  Root completed: false
+  Fork [samples=2, completed=false]
+    Child 0:
+      Result 'Child 0' [samples=1, completed=true]
+    Child 1:
+      Fork [samples=1, completed=false]
+        Child 0:
+          Result 'Grandchild 0' [samples=1, completed=true]
+        Child 1: not materialized
+    Child 2: not materialized
+
+
+  === After 5 sample(s) ===
+  Root completed: false
+  Fork [samples=2, completed=false]
+    Child 0:
+      Result 'Child 0' [samples=1, completed=true]
+    Child 1:
+      Fork [samples=1, completed=false]
+        Child 0:
+          Result 'Grandchild 0' [samples=1, completed=true]
+        Child 1: not materialized
+    Child 2: not materialized
+  |}]

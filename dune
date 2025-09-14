@@ -1,5 +1,5 @@
 
 (executables
- (names        solve_file random_hexo_puzzle pento_solve hexo_solve solve        play        benchmark estimate_polyomino)
- (public_names solve_file random_hexo_puzzle pento_solve hexo_solve knight_solve knight_play - estimate_polyomino)
+ (names        solve_file random_hexo_puzzle pento_solve hexo_solve solve        play        benchmark estimate_polyomino estimate_classic_pento test_convergence analyze_depths)
+ (public_names solve_file random_hexo_puzzle pento_solve hexo_solve knight_solve knight_play - estimate_polyomino estimate_classic_pento test_convergence analyze_depths)
  (libraries stdio graphics unix knights_tour pentominos searchspace))
