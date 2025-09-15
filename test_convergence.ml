@@ -26,8 +26,8 @@ let () =
   Printf.printf "True values: nodes=%d, fails=%d, solutions=%d\n\n" 
     true_values.nodes true_values.fails true_values.solutions;
   
-  let batch_size = 10_000 in
-  let est = Stochastic_estimator.create ~selector:Stochastic_estimator.undersampled_selector pentomino_space in
+  let batch_size = 2_000 in
+  let est = Stochastic_estimator.create ~selector:Stochastic_estimator.probabilistic_undersampled_selector pentomino_space in
   
   Printf.printf "Testing convergence in batches of %d samples:\n" batch_size;
   Printf.printf "Batch | Samples | Nodes Est  | Fails Est  | Sols Est | Node Acc | Fail Acc | Sol Acc | Materialized\n";
@@ -42,7 +42,7 @@ let () =
     let sol_accuracy = current_estimates.solutions /. (float_of_int true_values.solutions) *. 100.0 in
     let total_samples = batch * batch_size in
     
-    Printf.printf "%5d | %7d | %10.0f | %10.0f | %8.0f | %7.1f%% | %7.1f%% | %6.1f%% | %11d\n%!"
+    Printf.printf "%5d | %7d | %10.0f | %10.0f | %8.1f | %7.1f%% | %7.1f%% | %6.1f%% | %11d\n%!"
       batch total_samples current_estimates.nodes current_estimates.fails current_estimates.solutions 
       node_accuracy fail_accuracy sol_accuracy current_estimates.materialized_nodes;
   done;

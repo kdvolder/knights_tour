@@ -18,7 +18,7 @@ let () =
     In_channel.with_open_text puzzle_file Puzzle.load
   in
   let searchspace = Puzzle.solve puzzle in
-  let estimator = Stochastic_estimator.create ~selector:Stochastic_estimator.undersampled_selector searchspace in
+  let estimator = Stochastic_estimator.create ~selector:Stochastic_estimator.probabilistic_undersampled_selector searchspace in
   let space_complete = ref false in
   while not !space_complete do
     space_complete := Stochastic_estimator.sample batch_size estimator;

@@ -315,6 +315,36 @@ let undersampled_selector (node : 'a node) : int =
 	List.nth candidates (Random.int (List.length candidates))
 
 
+(* Select child with probability proportional to estimated unsampled leaves *)
+let probabilistic_undersampled_selector (node : 'a node) : int =
+  let n = Array.length node.children in
+  if n = 0 then 0
+  else
+    let unmaterialized = List.filter (fun i -> node.children.(i) = None) (List.init n Fun.id) in
+    if List.length unmaterialized > 0 then
+      (* If any unmaterialized children, treat as infinite estimated children: pick one at random *)
+      List.nth unmaterialized (Random.int (List.length unmaterialized))
+    else (
+      (* All children materialized: use unsampled-leaves-based selection *)
+      let unsampled_leaves = Array.init n (fun i ->
+        match node.children.(i) with
+        | Some child ->
+          let est_leaves = child.fail_estimate +. child.solution_estimate in
+          Float.max 0. (est_leaves -. float_of_int child.samples)
+        | None -> 0.0 (* unreachable, all materialized *)
+      ) in
+      let total = Array.fold_left ( +. ) 0.0 unsampled_leaves in
+      if total = 0.0 then Random.int n
+      else
+        let r = Random.float total in
+        let rec pick i acc =
+          if i >= n then n - 1
+          else if acc +. unsampled_leaves.(i) >= r then i
+          else pick (i+1) (acc +. unsampled_leaves.(i))
+        in pick 0 0.0
+    )
+
+
 let weighted_selector (node : 'a node) : int =
 	let n = Array.length node.children in
 	if n = 0 then 0
