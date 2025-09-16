@@ -26,14 +26,14 @@ let () =
   Printf.printf "True values: nodes=%d, fails=%d, solutions=%d\n\n" 
     true_values.nodes true_values.fails true_values.solutions;
   
-  let batch_size = 2_000 in
+  let batch_size = 10_000 in
   let est = Stochastic_estimator.create ~selector:Stochastic_estimator.probabilistic_undersampled_selector pentomino_space in
   
   Printf.printf "Testing convergence in batches of %d samples:\n" batch_size;
   Printf.printf "Batch | Samples | Nodes Est  | Fails Est  | Sols Est | Node Acc | Fail Acc | Sol Acc | Materialized\n";
   Printf.printf "------|---------|------------|------------|----------|----------|----------|---------|-------------\n";
   
-  for batch = 1 to 20 do
+  for batch = 1 to 24 do
     ignore (Stochastic_estimator.sample batch_size est);
     
     let current_estimates = Stochastic_estimator.estimates est in
