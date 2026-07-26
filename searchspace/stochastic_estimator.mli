@@ -82,3 +82,27 @@ val sample : int -> 'a t -> bool
     explored. This means there is no point in doing any more sampling. *)
 val estimates : 'a t -> estimates
 (** [estimates est] returns the current estimates from the estimator. *)
+
+type leaf_type = Fail | Solution
+
+type materialized_stats = {
+    total_materialized : int;
+    (** Total number of nodes in the materialized tree. *)
+    max_depth : int;
+    (** Maximum depth of any node in the materialized tree. *)
+    leaf_depths_fail : (int * int) list;
+    (** Depth histogram for failed leaves in the materialized tree. *)
+    leaf_depths_solution : (int * int) list;
+    (** Depth histogram for solution leaves in the materialized tree. *)
+    fork_depths : (int * int) list;
+    (** List of (depth, count) pairs for fork nodes in the materialized tree. *)
+    avg_leaf_depth_fail : float;
+    (** Average depth of failed leaves in the materialized tree. *)
+    avg_leaf_depth_solution : float;
+    (** Average depth of solution leaves in the materialized tree. *)
+}
+(** Statistics about the structure of the materialized portion of the search space. *)
+
+val analyze_materialized : 'a t -> materialized_stats
+(** [analyze_materialized est] inspects the structure of the already-materialized tree.
+    This is a read-only operation that does not trigger any new materialization. *)

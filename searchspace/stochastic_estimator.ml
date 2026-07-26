@@ -304,7 +304,17 @@ type estimates = {
 	materialized_nodes : int;
 }
 
+type leaf_type = Fail | Solution
 
+type materialized_stats = {
+	total_materialized : int;
+	max_depth : int;
+	leaf_depths_fail : (int * int) list;
+	leaf_depths_solution : (int * int) list;
+	fork_depths : (int * int) list;
+	avg_leaf_depth_fail : float;
+	avg_leaf_depth_solution : float;
+}
 
 let estimate ?(selector=undersampled_selector) n_trials (space : 'a Searchspace.t) : estimates =
 	let root = create_node space in
@@ -514,6 +524,51 @@ let estimates (est : 'a t) : estimates =
 		solutions = est.root.solution_estimate;
 		materialized_nodes = est.root.materialized_nodes;
 	}
+
+let analyze_materialized (est : 'a t) : materialized_stats =
+	(* Walk the materialized tree and collect depth statistics. Read-only - no new materialization. *)
+	let fail_depths = ref [] in
+	let sol_depths = ref [] in
+	let fork_depths = ref [] in
+	let rec walk depth node =
+		match node.node_view with
+		| Result _ -> sol_depths := (depth, 1) :: !sol_depths
+		| Fail -> fail_depths := (depth, 1) :: !fail_depths
+		| Fork _ ->
+			fork_depths := (depth, 1) :: !fork_depths;
+			Array.iter (function
+				| Some child -> walk (depth + 1) child
+				| None -> () (* unmaterialized child - skip *)
+			) node.children
+	in
+	walk 0 est.root;
+	let total_materialized =
+		List.fold_left (fun acc (_, c) -> acc + c) 0 !fail_depths
+		+ List.fold_left (fun acc (_, c) -> acc + c) 0 !sol_depths
+		+ List.fold_left (fun acc (_, c) -> acc + c) 0 !fork_depths
+	in
+	let max_depth =
+		(List.map fst !fail_depths @ List.map fst !sol_depths
+		 @ List.map fst !fork_depths) |> function
+		| [] -> 0 | d :: ds -> List.fold_left max d ds
+	in
+	let avg_leaf_depth_fail =
+		match !fail_depths with
+		| [] -> 0.0
+		| _ ->
+			let total = List.fold_left (fun acc (d, c) -> acc +. float_of_int d *. float_of_int c) 0.0 !fail_depths in
+			let count = List.fold_left (fun acc (_, c) -> acc + c) 0 !fail_depths in
+			total /. float_of_int count
+	in
+	let avg_leaf_depth_solution =
+		match !sol_depths with
+		| [] -> 0.0
+		| _ ->
+			let total = List.fold_left (fun acc (d, c) -> acc +. float_of_int d *. float_of_int c) 0.0 !sol_depths in
+			let count = List.fold_left (fun acc (_, c) -> acc + c) 0 !sol_depths in
+			total /. float_of_int count
+	in
+	{ total_materialized; max_depth; leaf_depths_fail = !fail_depths; leaf_depths_solution = !sol_depths; fork_depths = !fork_depths; avg_leaf_depth_fail; avg_leaf_depth_solution }
 
 let%expect_test "incremental estimator API on unbalanced searchspace" =
   let right_heavy_space = (
