@@ -181,96 +181,12 @@ type 'a node = {
 	 mutable materialized_nodes : int;               (* Number of materialized nodes in this subtree *)
 }
 
-(* Quadratic weight function with k = 1/sqrt(L) *)
-let quadratic_weight samples l_f =
-  let samples_f = float_of_int samples in
-  
-  if samples_f >= l_f then 
-    1.0  (* fully sampled *)
-  else if l_f <= 1.0 then
-    1.0  (* single leaf case *)
-  else (
-    (* let k = 1.0 /. sqrt l_f in *)
-	let k = 0.01 in
-    let diff = (samples_f -. l_f) /. (l_f -. 1.0) in
-    1.0 +. (k -. 1.0) *. diff *. diff  (* quadratic formula *)
-  )
-
-let%expect_test "quadratic_weight function constraints" = begin
-  (* Test fundamental constraints *)
-  Printf.printf "=== Design Constraints ===\n";
-  
-  (* Constraint 1: f(L) = 1 (fully sampled) *)
-  List.iter (fun l ->
-    let weight = quadratic_weight l (float_of_int l) in
-    Printf.printf "f(%d,%.0f) = %.6f (should be 1.0)\n" l (float_of_int l) weight;
-  ) [1; 2; 5; 10; 100];
-  
-  Printf.printf "\n";
-  
-  (* Constraint 2: f(1,L) = 1/sqrt(L) *)
-  List.iter (fun l_int ->
-    let l_f = float_of_int l_int in
-    let weight = quadratic_weight 1 l_f in
-    let expected = 1.0 /. sqrt l_f in
-    Printf.printf "f(1,%.0f) = %.6f (should be %.6f = 1/sqrt(%.0f))\n" l_f weight expected l_f;
-  ) [1; 4; 9; 16; 100];
-  
-  Printf.printf "\n";
-  
-  (* Test monotonicity *)
-  Printf.printf "=== Monotonicity Test ===\n";
-  let l = 10 in
-  let l_f = float_of_int l in
-  Printf.printf "L=%d: " l;
-  for samples = 1 to l do
-    let weight = quadratic_weight samples l_f in
-    Printf.printf "%.3f " weight;
-  done;
-  Printf.printf "(should increase)\n\n";
-  
-  (* Test extreme SEED 7 scenario *)
-  Printf.printf "=== SEED 7 Scenario ===\n";
-  let w1 = quadratic_weight 4158 4158.0 in
-  let w2 = quadratic_weight 66 66.0 in
-  Printf.printf "Child1 (4158/4158): %.6f\n" w1;
-  Printf.printf "Child2 (66/66): %.6f\n" w2;
-  Printf.printf "Ratio: %.2fx (vs old broken 63x)\n" (w1 /. w2);
-end;
-[%expect{|
-  === Design Constraints ===
-  f(1,1) = 1.000000 (should be 1.0)
-  f(2,2) = 1.000000 (should be 1.0)
-  f(5,5) = 1.000000 (should be 1.0)
-  f(10,10) = 1.000000 (should be 1.0)
-  f(100,100) = 1.000000 (should be 1.0)
-
-  f(1,1) = 1.000000 (should be 1.000000 = 1/sqrt(1))
-  f(1,4) = 0.010000 (should be 0.500000 = 1/sqrt(4))
-  f(1,9) = 0.010000 (should be 0.333333 = 1/sqrt(9))
-  f(1,16) = 0.010000 (should be 0.250000 = 1/sqrt(16))
-  f(1,100) = 0.010000 (should be 0.100000 = 1/sqrt(100))
-
-  === Monotonicity Test ===
-  L=10: 0.010 0.218 0.401 0.560 0.694 0.804 0.890 0.951 0.988 1.000 (should increase)
-
-  === SEED 7 Scenario ===
-  Child1 (4158/4158): 1.000000
-  Child2 (66/66): 1.000000
-  Ratio: 1.00x (vs old broken 63x)
-  |}]
-
-let child_average (children : 'a node option array) (f : 'a node -> float) : float =
+let child_average (children : 'a node option array) (f : 'a node -> float) :
+	float =
 	let materialized = Array.to_list children |> List.filter_map (fun c -> c) in
-	
-	let add_weighted_child (acc_value, acc_weight) child =
-		(* let weight = quadratic_weight child.samples (child.solution_estimate +. child.fail_estimate) in *)
-		let weight = 1.0 in
-		let value = f child in
-		(acc_value +. value *. weight, acc_weight +. weight)
-	in
-	let (weighted_sum, total_weight) = List.fold_left add_weighted_child (0.0, 0.0) materialized in
-	weighted_sum /. total_weight
+	match materialized with
+	| [] -> 0.0
+	| xs -> List.fold_left (fun acc child -> acc +. f child) 0.0 materialized /. float_of_int (List.length xs)
 
 let children_estimate (children : 'a node option array) (f : 'a node -> float) : float =
 	float_of_int (Array.length children) *. child_average children f
@@ -344,66 +260,6 @@ let probabilistic_undersampled_selector (node : 'a node) : int =
         in pick 0 0.0
     )
 
-
-let weighted_selector (node : 'a node) : int =
-	let n = Array.length node.children in
-	if n = 0 then 0
-	else
-		let materialized = Array.to_list node.children |> List.filter_map (fun c -> c) in
-		let avg =
-			match materialized with
-			| [] -> 1.0
-			| xs -> List.fold_left ( +. ) 0. (List.map (fun c -> c.nodes_estimate) xs) /. float_of_int (List.length xs)
-		in
-		let weights = Array.init n (fun i ->
-			match node.children.(i) with
-			| Some child -> max child.nodes_estimate 1.0
-			| None -> avg
-		) in
-		let total = Array.fold_left ( +. ) 0.0 weights in
-		let r = Random.float total in
-		let rec pick i acc =
-			if i >= n then n - 1
-			else if acc +. weights.(i) >= r then i
-			else pick (i+1) (acc +. weights.(i))
-		in pick 0 0.0
-
-let variance (node : 'a node) : float =
-	let n = Array.length node.children in
-	if n = 0 then 0.0
-	else
-	let materialized =
-		Array.to_list node.children |> List.filter_map (fun c -> c)
-	in
-	let m = List.length materialized in
-	if m < 2 then Float.infinity
-	else
-		let mean = (node.nodes_estimate -. 1.0) /. float_of_int n in
-		List.fold_left (fun acc c -> acc +. (c.nodes_estimate -. mean) ** 2.) 0.0 materialized /. float_of_int m
-
-(* Variance-based selector: chooses child with highest variance in nodes_estimate *)
-let variance_selector (node : 'a node) : int =
-	let n = Array.length node.children in
-	if n = 0 then 0
-	else
-			let unmaterialized = List.filter (fun i -> node.children.(i) = None) (List.init n Fun.id) in
-			if List.length unmaterialized > 0 then
-				List.nth unmaterialized (Random.int (List.length unmaterialized))
-			else
-				(* All children are materialized: select child with highest uncertainty-weighted variance *)
-				let priorities = Array.init n (fun i ->
-					match node.children.(i) with
-					| Some c ->
-						let leaf_estimate = Float.max 1.0 (c.solution_estimate +. c.fail_estimate) in
-	
-						let sample_ratio = min 1.0 (float_of_int c.samples /. leaf_estimate) in
-						let uncertainty = (1.0 -. sample_ratio) ** 2.0 in
-						variance c *. uncertainty
-					| None -> neg_infinity
-				) in
-				let max_priority = Array.fold_left max neg_infinity priorities in
-				let candidates = List.filter (fun i -> priorities.(i) = max_priority) (List.init n Fun.id) in
-				List.nth candidates (Random.int (List.length candidates))
 
 let rec walk select_child (node : 'a node) : unit =
 	if node.isCompleted then () 

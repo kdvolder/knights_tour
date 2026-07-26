@@ -30,12 +30,6 @@ val probabilistic_undersampled_selector : 'a child_selector
 (** Similar to [undersampled_selector] but uses a probabilistic approach to avoid
     over-focusing on the least-sampled children. *)
 
-val weighted_selector : 'a child_selector
-(** Prefers to select children that have a higher number of descendants. *)
-
-val variance_selector : 'a child_selector
-(** Prefers to select children that have a higher variance in their estimates. *)
-
 type estimates = {
     nodes : float;
     (** The estimated number of nodes in the search space. *)
