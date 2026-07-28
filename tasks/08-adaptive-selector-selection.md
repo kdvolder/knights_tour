@@ -46,7 +46,7 @@ When called on a fork node, it:
 2. If memory is plentiful (below threshold): behaves like `undersampled_selector` — picks child with fewest samples
 3. If memory is tight (above threshold): behaves like `greedy_completion_selector` — picks child with lowest absolute `nodes_estimate`
 
-The greedy completion behavior uses **absolute node estimates** (not ratios). It looks at each child's `nodes_estimate` and picks the one with the smallest value — the branch that requires the least remaining work to complete. Once completed, pruning frees memory.
+The greedy completion behavior uses **remaining unmaterialized work** (not total estimate). For each child, it calculates `nodes_estimate - materialized_nodes` and picks the one with the smallest value — the branch closest to completion. Once completed, pruning frees memory.
 
 ## Acceptance Criteria
 
@@ -101,10 +101,10 @@ The greedy completion behavior uses **absolute node estimates** (not ratios). It
 ```ocaml
 let%test_module "greedy_completion_selector" = (module struct
   
-  (* Test: greedy selector picks child with lowest node estimate *)
-  let test_greedy_picks_lowest_estimate () = 
-    (* Create tree with children having different node estimates *)
-    (* Apply greedy selector — should pick child with smallest estimate *)
+  (* Test: greedy selector picks child with lowest remaining work *)
+  let test_greedy_picks_lowest_remaining_work () = 
+    (* Create tree with children having different remaining work (nodes_estimate - materialized) *)
+    (* Apply greedy selector — should pick child with smallest remaining work, not necessarily smallest total *)
     ...
   
   (* Test: greedy selector avoids fully sampled/completed nodes *)
@@ -133,11 +133,7 @@ let%test_module "memory_aware_selector" = (module struct
     (* Verify selector picks child with fewest samples (undersampled behavior) *)
     ...
   
-  (* Test: greedy completion when memory pressure detected *)
-  let test_greedy_when_memory_tight () = 
-    (* Create tree with children having different node estimates *)
-    (* Mock memory as tight (low free ratio) *)
-    (* Verify selector picks child with lowest estimate (greedy behavior) *)
+
     ...
   
   (* Test: threshold parameter works *)
@@ -204,7 +200,7 @@ The selector reads memory pressure internally and delegates to the appropriate s
 let memory_aware_selector ?(threshold = 0.8) (node : 'a node) : int =
   let free_ratio = Searchspace.memfree () in
   if 1.0 -. free_ratio > threshold then (
-    (* Memory tight → greedy completion: pick child with lowest node estimate *)
+    (* Memory tight → greedy completion: pick child with lowest remaining work *)
     let children = match node.children with
       | Children arr -> arr
       | Pruned _ -> invalid_arg "Stochastic_estimator: memory_aware_selector on pruned node"
@@ -215,10 +211,11 @@ let memory_aware_selector ?(threshold = 0.8) (node : 'a node) : int =
       match children.(i) with
       | Some child ->
           if not child.isCompleted then (
-            (* Use absolute node estimate — pick the branch with least remaining work *)
-            if child.nodes_estimate < !best_estimate then (
+            (* Remaining work = total estimate minus what's already materialized *)
+            let remaining_work = child.nodes_estimate -. Float.of_int child.materialized_nodes in
+            if remaining_work < !best_estimate then (
               best_idx := i;
-              best_estimate := child.nodes_estimate
+              best_estimate := remaining_work
             )
           )
       | None -> ()  (* Unmaterialized — treat as infinite work *)
@@ -232,17 +229,19 @@ let memory_aware_selector ?(threshold = 0.8) (node : 'a node) : int =
 
 ### Greedy Completion Behavior
 
-The greedy completion behavior uses **absolute node estimates** (not ratios):
-- For each child, look at `child.nodes_estimate` — the estimated total nodes in that subtree
-- Pick the child with the **smallest** estimate — the branch requiring least remaining work to complete
+The greedy completion behavior uses **remaining unmaterialized work** (not total estimate):
+- For each child, calculate: `unmaterialized_work = nodes_estimate - materialized_nodes`
+- Pick the child with the **smallest** remaining work — the branch closest to completion
 - Skip fully sampled/completed nodes (they have zero unmaterialized children)
 - Treat `None` (unmaterialized) as infinite work — don't pick unexplored branches
 
 This is the exact opposite of undersampled:
 - **Undersampled**: pick from children with fewest samples (spread thin)
-- **Greedy completion**: pick child with lowest node estimate (concentrate to finish)
+- **Greedy completion**: pick child with least remaining unmaterialized work (concentrate to finish)
 
 The goal is simple: **finish a subtree → prune it → regain memory**. Always do the least remaining work first.
+
+Note: `nodes_estimate` alone is misleading — a large subtree that's mostly explored has less remaining work than a small one that's completely unexplored. The actual "work" is `nodes_estimate - materialized_nodes`.
 
 ### Integration with Existing API
 
