@@ -262,13 +262,14 @@ let probabilistic_undersampled_selector (node : 'a node) : int =
 
 
 let rec walk select_child on_solution (node : 'a node) : unit =
-	if node.isCompleted then () 
-	else (
-		match node.node_view with
-		| Fail -> ()
-		| Result x -> 
-			on_solution x
-		| Fork choices ->
+	match node.node_view with
+	| Fail -> ()
+	| Result x -> 
+		(* Invoke callback for solution leaves before checking completion *)
+		on_solution x
+	| Fork choices ->
+		if node.isCompleted then () 
+		else (
 			let num_choices = Array.length node.children in
 			if num_choices > 0 then (
 				let chosen = select_child node in
@@ -857,5 +858,78 @@ let%expect_test "create with callback compiles" = begin
   [%expect{|
     Created estimator with callback
     Root samples: 0
+  |}]
+end
+
+(** Phase 2: Callback Invocation Tests - verify callback fires correctly *)
+
+let%expect_test "callback called on solution found during sample" = begin
+  let simple_tree = Searchspace.(
+    alt [
+      return "solution_a";
+      empty
+    ]
+  ) in
+  let solutions = ref [] in
+  let on_solution x = solutions := !solutions @ [x] in
+  let est = create ~on_solution simple_tree in
+  ignore (sample 10 est);
+  Printf.printf "Solutions found: %d\n" (List.length !solutions);
+  Printf.printf "Solutions: %s\n" (String.concat ", " !solutions);
+  [%expect{|
+    Solutions found: 1
+    Solutions: solution_a
+  |}]
+end
+
+let%expect_test "callback receives correct solution value" = begin
+  let simple_tree = Searchspace.(
+    alt [
+      return "first";
+      return "second";
+      empty
+    ]
+  ) in
+  let solutions = ref [] in
+  let on_solution x = solutions := !solutions @ [x] in
+  let est = create ~on_solution simple_tree in
+  ignore (sample 10 est);
+  Printf.printf "Solutions: %s\n" (String.concat ", " !solutions);
+  [%expect{|
+    Solutions: first, second
+  |}]
+end
+
+let%expect_test "callback not called for failures" = begin
+  let simple_tree = Searchspace.(
+    alt [
+      return "solution";
+      empty
+    ]
+  ) in
+  let solutions = ref [] in
+  let on_solution x = solutions := !solutions @ [x] in
+  let est = create ~on_solution simple_tree in
+  ignore (sample 10 est);
+  Printf.printf "Solutions: %s\n" (String.concat ", " !solutions);
+  [%expect{|
+    Solutions: solution
+  |}]
+end
+
+let%expect_test "callback not called when no solutions exist" = begin
+  let simple_tree = Searchspace.(
+    alt [
+      empty;
+      empty
+    ]
+  ) in
+  let solutions = ref [] in
+  let on_solution x = solutions := !solutions @ [x] in
+  let est = create ~on_solution simple_tree in
+  ignore (sample 10 est);
+  Printf.printf "Solutions: %s\n" (String.concat ", " !solutions);
+  [%expect{|
+    Solutions:
   |}]
 end
