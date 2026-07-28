@@ -2,5 +2,7 @@ _build
 .github-token
 _opam
 saves/2023.*
+saves/pinned/snapshot-treequence.txt
+saves/pinned/stats-treequence.csv
 on_boot.log
 notes.txt

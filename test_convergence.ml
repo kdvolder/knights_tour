@@ -1,8 +1,7 @@
 let () =
   Printf.printf "=== Pentomino Convergence Test ===\n\n";
   
-  (* Use SEED 7 which showed the problematic behavior *)
-  Random.full_init [|7|];
+  Random.self_init();
   
   let pentomino_puzzle = Pentominos.Puzzle.classic_no_symmetric_solutions in
   let pentomino_space = Pentominos.Puzzle.solve pentomino_puzzle in
