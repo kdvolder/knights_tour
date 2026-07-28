@@ -28,7 +28,15 @@ let () =
   Printf.printf "True values: nodes=%d, fails=%d, solutions=%d\n\n" 
     true_values.nodes true_values.fails true_values.solutions;
   
-  let est = Stochastic_estimator.create ~selector:Stochastic_estimator.undersampled_selector pentomino_space in
+  let solution_count = ref 0 in
+  let on_solution board =
+    incr solution_count;
+    Printf.printf "\n*** Solution #%d ***\n%s\n" !solution_count (Pentominos.Board.to_string board)
+  in
+  let est = Stochastic_estimator.create 
+    ~selector:Stochastic_estimator.undersampled_selector
+    ~on_solution
+    pentomino_space in
   
   Printf.printf "*** FOCUSING ON SEED 7 - THE BIG DROP ***\n";
   Printf.printf "Sample 1 -> 2: 187,649 nodes -> 5,390 nodes (97%% drop)\n\n";
