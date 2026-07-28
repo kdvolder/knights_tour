@@ -655,7 +655,7 @@ let default_progress_printer (p : progress) : unit =
     else if Float.is_infinite p.estimated_remaining_seconds then "inf"
     else format_time p.estimated_remaining_seconds
   in
-  Printf.printf "[%5.1f%%] materialized: %d, ETA: %s\n" p.progress_percent p.materialized_nodes eta_str;
+  Printf.printf "[%5.1f%%] materialized: %d, elapsed: %s, ETA: %s\n" p.progress_percent p.materialized_nodes (format_time p.elapsed_seconds) eta_str;
   flush stdout
 
 let run_with_progress ?(batch_size = 100) ?(on_progress = default_progress_printer) (est : 'a t) : unit =
@@ -1251,8 +1251,8 @@ let%expect_test "run_with_progress uses default stdout printer" = begin
   let est = create simple_tree in
   run_with_progress ~batch_size:3 est;
   [%expect{|
-    [100.0%] materialized: 4, ETA: done
-    [100.0%] materialized: 4, ETA: done
+    [100.0%] materialized: 4, elapsed: 0 s, ETA: done
+    [100.0%] materialized: 4, elapsed: 0 s, ETA: done
   |}]
 end
 
