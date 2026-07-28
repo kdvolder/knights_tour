@@ -1146,3 +1146,53 @@ let%expect_test "make_progress after sampling" = begin
   Printf.printf "progress%%: %.1f\n" p.progress_percent;
 end
 
+(** Task 2 Phase 2: Time Formatting Tests *)
+
+let%expect_test "format_time: seconds" = begin
+  Printf.printf "%s\n" (format_time 0.0);
+  Printf.printf "%s\n" (format_time 5.0);
+  Printf.printf "%s\n" (format_time 42.0);
+  [%expect{|
+    0 s
+    5 s
+    42 s
+  |}]
+end
+
+let%expect_test "format_time: minutes and seconds" = begin
+  Printf.printf "%s\n" (format_time 59.0);
+  Printf.printf "%s\n" (format_time 60.0);
+  Printf.printf "%s\n" (format_time 142.0);
+  [%expect{|
+    59 s
+    1 min
+    2 min 22 s
+  |}]
+end
+
+let%expect_test "format_time: hours" = begin
+  Printf.printf "%s\n" (format_time 3600.0);
+  Printf.printf "%s\n" (format_time 7530.0);
+  [%expect{|
+    1 h
+    2 h 5 min 30 s
+  |}]
+end
+
+let%expect_test "format_time: days" = begin
+  Printf.printf "%s\n" (format_time 86400.0);
+  Printf.printf "%s\n" (format_time 150125.0);
+  [%expect{|
+    1 day
+    1 day, 17 h 42 min 5 s
+  |}]
+end
+
+let%expect_test "format_time: larger units" = begin
+  Printf.printf "%s\n" (format_time 31536000.0); (* ~1 year *)
+  [%expect{|
+    1 year
+  |}]
+end
+
+
