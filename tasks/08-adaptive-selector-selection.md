@@ -1,8 +1,8 @@
-# Task 8: Adaptive Selector Selection Based on Memory Pressure
+# Task 8: Memory-Aware Selector
 
 ## Goal
 
-Implement adaptive selector selection that monitors memory pressure and switches between broad exploration (undersampled) and greedy completion to ensure branches complete and can be pruned. This prevents unbounded memory growth by ensuring the estimator doesn't spread samples too thin across an ever-growing frontier.
+Implement a new selector function (`memory_aware_selector`) that monitors memory pressure and dynamically chooses between broad exploration (undersampled) and greedy completion. This prevents unbounded memory growth by ensuring the estimator doesn't spread samples too thin across an ever-growing frontier.
 
 ## Background
 
@@ -16,7 +16,7 @@ The regular solver (`solve_file.ml`) already solves this problem with `breadth_s
 - When memory is tight, it does **narrow exploration** (DFS-like) — follows one path to completion
 - The `limit` function comes from `Searchspace.limit_on_low_memory ~max_memory_ratio:0.95`
 
-The stochastic estimator needs the same adaptive behavior, but applied to selector selection rather than search order.
+The stochastic estimator needs the same adaptive behavior, but as a **selector function** — no API changes needed.
 
 ### How It Works in the Regular Solver
 
@@ -33,77 +33,70 @@ The `limit_on_low_memory` function reads `/proc/meminfo` (via `memfree.ml`) and 
 - **Low limit** → narrow exploration (DFS, follows one path to completion)
 - **High limit** → broad exploration (BFS, spreads across branches)
 
-### Selector Equivalents
+### Selector Behavior
 
-| Selector | Behavior | When to Use |
-|----------|----------|-------------|
-| `undersampled_selector` | Broad — spreads across unexplored branches (picks least-sampled children) | Memory plentiful, initial exploration |
-| `greedy_completion_selector` | Narrow — picks child with lowest estimated unmaterialized node count (absolute, not ratio) | Memory tight, need to complete branches for pruning |
+The `memory_aware_selector` is a single function with the same signature as all other selectors:
 
-The greedy completion selector is the **opposite** of undersampled:
-- **Undersampled**: pick from children with fewest samples (spread thin across branches)
-- **Greedy completion**: pick child with lowest absolute node estimate (concentrate to finish)
+```ocaml
+val memory_aware_selector : ?threshold:float -> 'a node -> int
+```
 
-The greedy selector uses **absolute node estimates** (not ratios). It looks at each child's `nodes_estimate` and picks the one with the smallest value — the branch that requires the least remaining work to complete. Once completed, pruning frees memory.
+When called on a fork node, it:
+1. Reads current memory pressure via `Searchspace.memfree` (cached)
+2. If memory is plentiful (below threshold): behaves like `undersampled_selector` — picks child with fewest samples
+3. If memory is tight (above threshold): behaves like `greedy_completion_selector` — picks child with lowest absolute `nodes_estimate`
+
+The greedy completion behavior uses **absolute node estimates** (not ratios). It looks at each child's `nodes_estimate` and picks the one with the smallest value — the branch that requires the least remaining work to complete. Once completed, pruning frees memory.
 
 ## Acceptance Criteria
 
-### 8.1 Memory Monitoring
+### 8.1 Selector Function
 
-1. **Memory pressure is monitored**:
-   - Uses existing `Searchspace.memfree` / `/proc/meminfo` infrastructure
-   - Checks memory ratio periodically (cached, not per-sample)
+1. **Same signature as existing selectors**:
+   - `memory_aware_selector : ?threshold:float -> 'a node -> int`
+   - Can be passed directly to `create ~selector:memory_aware_selector tree`
 
-2. **Memory pressure threshold is configurable**:
-   - Default: trigger greedy completion at 80% memory usage (similar to `max_memory_ratio:0.95`)
-   - Configurable via parameter
+2. **Undersampled behavior when memory is plentiful**:
+   - Below threshold (default 80% usage): picks child with fewest samples
+   - Same behavior as `undersampled_selector`
 
-### 8.2 Adaptive Selector Selection
+3. **Greedy completion when memory is tight**:
+   - Above threshold: picks child with lowest absolute `nodes_estimate`
+   - Skips completed/sampled nodes
+   - Treats unmaterialized children (`None`) as infinite work
 
-3. **Selector switches based on memory pressure**:
-   - When memory is plentiful: use `undersampled_selector` (broad exploration)
-   - When memory is tight: switch to `greedy_completion_selector` (picks child with lowest node estimate)
+4. **Configurable threshold**:
+   - Default: 80% memory usage (similar to `max_memory_ratio:0.95`)
+   - Configurable via optional parameter
 
-4. **Switching is smooth**:
-   - No abrupt state changes — selector can be changed between batches via `run_with_progress`
-   - Once switched to greedy, stays greedy until memory is relieved (optional hysteresis)
+### 8.2 Memory Monitoring
 
-5. **Selector change is transparent**:
-   - Existing code using `run_with_progress` works without changes (defaults to undersampled)
-   - New API allows specifying adaptive mode
+5. **Uses existing `Searchspace.memfree` infrastructure**:
+   - Reads `/proc/meminfo` via cached function (not per-sample)
+
+6. **Memory readings are cached**:
+   - Like `memfree`, reads from `/proc/meminfo` periodically, not on every selector call
 
 ### 8.3 Integration with Pruning (Task 6)
 
-6. **Greedy completion enables pruning**:
-   - When in greedy mode, branches complete faster (picks least remaining work) → more nodes get pruned
-   - Pruning frees memory → selector can switch back to undersampled (if hysteresis enabled)
+7. **Greedy completion enables pruning**:
+   - When memory is tight, branches complete faster (picks least remaining work) → more nodes get pruned
+   - Pruning frees memory → selector naturally switches back to undersampled behavior
 
-7. **Memory stays bounded**:
+8. **Memory stays bounded**:
    - Under sustained memory pressure, the estimator should not grow beyond configured limit
    - Completed branches are pruned and freed
 
 ### 8.4 Testing
 
-8. **Tests verify adaptive behavior**:
-   - Undersampled selector used when memory is plentiful
-   - Greedy completion selector selected when memory pressure detected
+9. **Tests verify selector behavior**:
+   - Undersampled behavior when memory is plentiful
+   - Greedy completion behavior when memory pressure detected
    - Estimates remain accurate regardless of selector mode
 
 ## Implementation Process (TDD)
 
-### Phase 1: Selector Interface Extension
-
-```ocaml
-(* stochastic_estimator.mli *)
-type selector_mode = 
-  | Undersampled   (** Broad exploration, spreads across branches *)
-  | GreedyCompletion (** Pick child with lowest absolute node estimate to finish a subtree quickly *)
-  | Adaptive of { memory_threshold : float } (** Switch based on memory pressure *)
-
-val create : ?selector_mode:selector_mode -> ...
-```
-
-### Phase 2: Greedy Completion Selector Tests
+### Phase 1: Greedy Completion Selector Tests
 
 ```ocaml
 let%test_module "greedy_completion_selector" = (module struct
@@ -128,97 +121,118 @@ let%test_module "greedy_completion_selector" = (module struct
 end)
 ```
 
-### Phase 3: Memory-Aware Selector Selection
+### Phase 2: Memory-Aware Selector Tests
 
 ```ocaml
-let%test_module "adaptive_selector" = (module struct
+let%test_module "memory_aware_selector" = (module struct
   
-  (* Test: undersampled selector used when memory is plentiful *)
+  (* Test: undersampled behavior when memory is plentiful *)
   let test_undersampled_when_memory_plentiful () = 
-    (* Create estimator with Adaptive mode *)
-    (* Simulate low memory pressure (mock memfree) *)
-    (* Verify undersampled selector is used *)
+    (* Create tree with children having different sample counts *)
+    (* Mock memory as plentiful (high free ratio) *)
+    (* Verify selector picks child with fewest samples (undersampled behavior) *)
     ...
   
-  (* Test: greedy completion selector selected when memory pressure detected *)
+  (* Test: greedy completion when memory pressure detected *)
   let test_greedy_when_memory_tight () = 
-    (* Create estimator with Adaptive mode *)
-    (* Simulate high memory pressure (mock memfree) *)
-    (* Verify greedy completion selector is used *)
+    (* Create tree with children having different node estimates *)
+    (* Mock memory as tight (low free ratio) *)
+    (* Verify selector picks child with lowest estimate (greedy behavior) *)
+    ...
+  
+  (* Test: threshold parameter works *)
+  let test_threshold_parameter () = 
+    (* Create tree, set custom threshold *)
+    (* Verify selector switches at the specified memory level *)
     ...
   
   (* Test: switching between modes preserves estimates *)
   let test_switching_preserves_estimates () = 
-    (* Create estimator, sample with undersampled *)
-    (* Switch to greedy completion, continue sampling *)
+    (* Create estimator with memory_aware_selector *)
+    (* Run samples through both modes (simulated by changing mock memory) *)
     (* Verify estimates are consistent across mode change *)
     ...
 end)
 ```
 
-### Phase 4: Integration with Pruning
+### Phase 3: Integration with Pruning
 
 ```ocaml
 let%test_module "adaptive_pruning" = (module struct
   
   (* Test: greedy mode enables pruning *)
   let test_greedy_enables_pruning () = 
-    (* Create large tree, enable adaptive mode *)
+    (* Create large tree, use memory_aware_selector *)
     (* Simulate memory pressure → switches to greedy *)
     (* Verify branches complete and prune faster than undersampled *)
     ...
   
   (* Test: memory stays bounded under pressure *)
   let test_memory_stays_bounded () = 
-    (* Create estimator with adaptive mode and memory threshold *)
+    (* Create estimator with memory_aware_selector and low threshold *)
     (* Run until memory pressure triggers greedy mode *)
     (* Verify memory does not exceed threshold (due to pruning) *)
     ...
 end)
 ```
 
-### Phase 5: Memory Monitoring Integration
+### Phase 4: Memory Monitoring Integration
 
 ```ocaml
 let%test_module "memory_monitoring" = (module struct
   
   (* Test: memory monitoring uses existing memfree infrastructure *)
   let test_uses_memfree () = 
-    (* Verify that adaptive mode reads from Searchspace.memfree *)
-    (* Or uses /proc/meminfo directly *)
+    (* Verify that memory_aware_selector reads from Searchspace.memfree *)
     ...
   
-  (* Test: memory readings are cached (not per-sample) *)
+  (* Test: memory readings are cached (not per-selector-call) *)
   let test_memory_readings_cached () = 
-    (* Create estimator with adaptive mode, run many samples *)
-    (* Verify memory is not read from /proc/meminfo on every sample *)
+    (* Create estimator with memory_aware_selector, run many samples *)
+    (* Verify memory is not read from /proc/meminfo on every selector call *)
     ...
 end)
 ```
 
 ## Implementation Details
 
-### Selector Selection Logic
+### Memory-Aware Selector Implementation
+
+The selector reads memory pressure internally and delegates to the appropriate strategy:
 
 ```ocaml
-let rec select_child (selector_mode : selector_mode) (node : 'a node) : int =
-  match selector_mode with
-  | Undersampled -> undersampled_selector node
-  | GreedyCompletion -> greedy_completion_selector node
-  | Adaptive { memory_threshold } ->
-      let free_ratio = Searchspace.memfree () in
-      if 1.0 -. free_ratio > memory_threshold then (
-        (* Memory tight → greedy completion *)
-        greedy_completion_selector node
-      ) else (
-        (* Memory plentiful → broad exploration *)
-        undersampled_selector node
-      )
+let memory_aware_selector ?(threshold = 0.8) (node : 'a node) : int =
+  let free_ratio = Searchspace.memfree () in
+  if 1.0 -. free_ratio > threshold then (
+    (* Memory tight → greedy completion: pick child with lowest node estimate *)
+    let children = match node.children with
+      | Children arr -> arr
+      | Pruned _ -> invalid_arg "Stochastic_estimator: memory_aware_selector on pruned node"
+    in
+    let best_idx = ref (-1) in
+    let best_estimate = ref Float.infinity in
+    for i = 0 to Array.length children - 1 do
+      match children.(i) with
+      | Some child ->
+          if not child.isCompleted then (
+            (* Use absolute node estimate — pick the branch with least remaining work *)
+            if child.nodes_estimate < !best_estimate then (
+              best_idx := i;
+              best_estimate := child.nodes_estimate
+            )
+          )
+      | None -> ()  (* Unmaterialized — treat as infinite work *)
+    done;
+    !best_idx
+  ) else (
+    (* Memory plentiful → undersampled: pick child with fewest samples *)
+    undersampled_selector node
+  )
 ```
 
-### Greedy Completion Selector Implementation
+### Greedy Completion Behavior
 
-The greedy completion selector uses **absolute node estimates** (not ratios):
+The greedy completion behavior uses **absolute node estimates** (not ratios):
 - For each child, look at `child.nodes_estimate` — the estimated total nodes in that subtree
 - Pick the child with the **smallest** estimate — the branch requiring least remaining work to complete
 - Skip fully sampled/completed nodes (they have zero unmaterialized children)
@@ -230,58 +244,36 @@ This is the exact opposite of undersampled:
 
 The goal is simple: **finish a subtree → prune it → regain memory**. Always do the least remaining work first.
 
-```ocaml
-let greedy_completion_selector (node : 'a node) : int =
-  let children = match node.children with
-    | Children arr -> arr
-    | Pruned _ -> invalid_arg "Stochastic_estimator: greedy selector on pruned node"
-  in
-  let best_idx = ref (-1) in
-  let best_estimate = ref Float.infinity in
-  for i = 0 to Array.length children - 1 do
-    match children.(i) with
-    | Some child ->
-        if not child.isCompleted then (
-          (* Use absolute node estimate — pick the branch with least remaining work *)
-          if child.nodes_estimate < !best_estimate then (
-            best_idx := i;
-            best_estimate := child.nodes_estimate
-          )
-        )
-    | None -> ()  (* Unmaterialized — treat as infinite work *)
-  done;
-  !best_idx
-```
+### Integration with Existing API
 
-### Integration with `run_with_progress`
+No changes needed to `create` or any other function:
 
 ```ocaml
-val run_with_progress : 
-  ?batch_size:int -> 
-  ?selector_mode:selector_mode ->
-  ?on_progress:(progress -> unit) -> 
-  'a t -> unit
+(* Existing API — no changes *)
+let est = Stochastic_estimator.create ~selector:Stochastic_estimator.memory_aware_selector tree
+
+(* With custom threshold *)
+let est = Stochastic_estimator.create ~selector:(Stochastic_estimator.memory_aware_selector ~threshold:0.7) tree
+
+(* Works with run_with_progress — no changes needed *)
+Stochastic_estimator.run_with_progress ~batch_size:5000 est
 ```
 
 ### Reusing Existing Infrastructure
 
-The existing `Searchspace.limit_on_low_memory` function already provides the memory-to-limit mapping. We can adapt it:
+The existing `Searchspace.limit_on_low_memory` function already provides the memory-to-limit mapping. We can adapt it for reference:
 
 ```ocaml
-let selector_from_limit limit =
-  if limit < 1.0 then GreedyCompletion      (* Very tight → greedy *)
-  else Undersampled               (* Plenty of room → broad *)
-
-let adaptive_selector ~max_memory_ratio =
-  let limit_fn = Searchspace.limit_on_low_memory ~max_memory_ratio () in
-  fun node -> selector_from_limit (limit_fn ()) node
+(* Reference from solve_file.ml — shows the pattern *)
+let memory_limit = Searchspace.limit_on_low_memory ~max_memory_ratio:0.95
 ```
+
+The `memory_aware_selector` follows the same pattern but applies it at the selector level.
 
 ## Files to Modify
 
-- `searchspace/stochastic_estimator.ml` - implementation
-- `searchspace/stochastic_estimator.mli` - interface update (add `selector_mode`, memory monitoring)
-- `searchspace/searchspace.ml` - possibly expose `memfree` for use by estimator
+- `searchspace/stochastic_estimator.ml` - implementation (add `memory_aware_selector` function)
+- `searchspace/stochastic_estimator.mli` - interface update (export `memory_aware_selector`)
 
 ## Files to Create
 
@@ -289,30 +281,28 @@ let adaptive_selector ~max_memory_ratio =
 
 ## Dependencies
 
-- **Task 6 (Pruning)**: Adaptive selection only makes sense if completed branches can be pruned. Without pruning, switching to greedy mode just delays the inevitable OOM.
+- **Task 6 (Pruning)**: Memory-aware selector only makes sense if completed branches can be pruned. Without pruning, switching to greedy mode just delays the inevitable OOM.
 - **Task 3/4 (Serialization)**: If we save state, the selector mode should be part of the saved state so it can resume correctly.
 
 ## Design Notes
 
-### Why Not Just Use `limit_on_low_memory` Directly?
+### Why a Selector Function?
 
-The regular solver uses `limit_on_low_memory` with `breadth_search`, which controls the search order within a single traversal. The stochastic estimator needs something different:
-
-- **Regular solver**: one search, controls breadth vs depth of traversal
-- **Stochastic estimator**: many independent samples, needs to choose which branch each sample explores
-
-The adaptive selector is the stochastic estimator's equivalent of `limit_on_low_memory` — it controls whether samples spread across branches or focus on completing individual paths.
+A selector function is the simplest possible API addition:
+- Same signature as all existing selectors (`'a node -> int`)
+- No new types, no changes to `create`, no changes to `run_with_progress`
+- Users just pass a different selector function — everything else works the same
 
 ### Hysteresis (Optional)
 
 To avoid thrashing between modes, consider hysteresis:
-- Switch to greedy at 80% memory usage
+- Switch to greedy at 80% memory usage (threshold)
 - Switch back to undersampled only when below 50% (after pruning freed memory)
 
-This prevents rapid mode switching that could waste samples.
+This prevents rapid mode switching that could waste samples. Implementation: store the last-used strategy in a mutable ref and only switch when memory crosses a different threshold on each direction.
 
 ### Performance Considerations
 
-- Memory readings should be cached (like `memfree` does) — not read from `/proc/meminfo` on every sample
-- Selector switching should happen between batches (in `run_with_progress`), not during sampling
-- The greedy selector is O(n) per node (scans children for lowest estimate), vs O(1) for undersampled. This is acceptable since it only runs when memory pressure is detected, not on every sample.
+- Memory readings should be cached (like `memfree` does) — not read from `/proc/meminfo` on every selector call
+- The greedy path is O(n) per node (scans children for lowest estimate), vs O(1) for undersampled. This is acceptable since it only runs when memory pressure is detected, not on every sample
+- The undersampled path delegates to the existing `undersampled_selector` — no performance regression when memory is plentiful
