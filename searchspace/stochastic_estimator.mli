@@ -73,8 +73,8 @@ val calculate_true_values : 'a Searchspace.t -> stats
 type 'a t
 (** An incremental estimator for a search space. *)
 
-val create : ?selector:'a child_selector -> 'a Searchspace.t -> 'a t
-(** [create ?selector searchspace] creates a new incremental estimator for the given search space, optionally using a custom selector. *)
+val create : ?selector:'a child_selector -> ?on_solution:('a -> unit) -> 'a Searchspace.t -> 'a t
+(** [create ?selector ?on_solution searchspace] creates a new incremental estimator for the given search space, optionally using a custom selector and an optional callback to receive solutions as they are found. The default callback does nothing. *)
 
 val sample : int -> 'a t -> bool
 (** [sample n est] performs [n] additional samples, updating the estimator's statistics.

@@ -261,13 +261,13 @@ let probabilistic_undersampled_selector (node : 'a node) : int =
     )
 
 
-let rec walk select_child (node : 'a node) : unit =
+let rec walk select_child on_solution (node : 'a node) : unit =
 	if node.isCompleted then () 
 	else (
 		match node.node_view with
-		| Fail | Result _ -> 
-			(* We reached a leaf - it's already counted as 1 sample *)
-			()
+		| Fail -> ()
+		| Result x -> 
+			on_solution x
 		| Fork choices ->
 			let num_choices = Array.length node.children in
 			if num_choices > 0 then (
@@ -279,7 +279,7 @@ let rec walk select_child (node : 'a node) : unit =
 						node.children.(chosen) <- Some c;
 						c
 				in
-				walk select_child child_node;
+				walk select_child on_solution child_node;
 				(* Calculate our sample count as sum of all child sample counts *)
 				node.samples <- Array.fold_left (fun acc child_opt -> 
 					match child_opt with 
@@ -319,7 +319,7 @@ type materialized_stats = {
 let estimate ?(selector=undersampled_selector) n_trials (space : 'a Searchspace.t) : estimates =
 	let root = create_node space in
 	for _ = 1 to n_trials do
-		ignore (walk selector root)
+		ignore (walk selector (fun _ -> ()) root)
 	done;
 	{
 		nodes = root.nodes_estimate;
@@ -503,16 +503,17 @@ let%expect_test "undersampling larger unbalanced searchspace" =
 type 'a t = {
 	root : 'a node;
 	selector : 'a child_selector;
+	on_solution : 'a -> unit;
 }
 
-let create ?(selector=undersampled_selector) (space : 'a Searchspace.t) : 'a t =
-	{ root = create_node space; selector }
+let create ?(selector=undersampled_selector) ?(on_solution=(fun _ -> ())) (space : 'a Searchspace.t) : 'a t =
+	{ root = create_node space; selector; on_solution }
 
 let sample n (est : 'a t) : bool =
 	let rec loop n =
 		if n <= 0 || est.root.isCompleted then ()
 		else (
-			ignore (walk est.selector est.root);
+			ignore (walk est.selector est.on_solution est.root);
 			loop (n-1)
 		)
 	in loop n; est.root.isCompleted
@@ -817,3 +818,44 @@ end;
         Child 1: not materialized
     Child 2: not materialized
   |}]
+
+(** Phase 1: API Design Tests - verify the callback API compiles and works *)
+
+let%expect_test "create without callback still works" = begin
+  let simple_tree = Searchspace.(
+    alt [
+      return "Child 0";
+      alt [ return "Grandchild 0"; return "Grandchild 1" ];
+      empty
+    ]
+  ) in
+  let est = create simple_tree in
+  Printf.printf "Created estimator without callback\n";
+  Printf.printf "Root samples: %d\n" est.root.samples;
+  [%expect{|
+    Created estimator without callback
+    Root samples: 0
+  |}]
+end
+
+let%expect_test "create with callback compiles" = begin
+  let simple_tree = Searchspace.(
+    alt [
+      return "Child 0";
+      alt [ return "Grandchild 0"; return "Grandchild 1" ];
+      empty
+    ]
+  ) in
+  let callback_count = ref 0 in
+  let on_solution x =
+    incr callback_count;
+    Printf.printf "Callback received: %s\n" x
+  in
+  let est = create ~on_solution simple_tree in
+  Printf.printf "Created estimator with callback\n";
+  Printf.printf "Root samples: %d\n" est.root.samples;
+  [%expect{|
+    Created estimator with callback
+    Root samples: 0
+  |}]
+end
