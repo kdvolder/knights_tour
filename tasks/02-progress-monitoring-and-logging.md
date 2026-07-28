@@ -148,12 +148,12 @@ end
 
 ### Phase 3: Reporter Integration Tests
 
-**Goal**: Implement `run_with_progress` — a wrapper that runs batches and reports progress.
+**Goal**: Implement `run_with_progress` — a wrapper that runs batches and invokes the callback (or default stdout printer) after each batch.
 
-**Acceptance**: All tests pass — `run_with_progress` correctly runs batches, reports progress after each one, and stops when complete.
+**Acceptance**: All tests pass — `run_with_progress` correctly runs batches, reports progress after each one (via callback or default printer), and stops when complete.
 
 ```ocaml
-let%expect_test "run_with_progress reports after each batch" = begin
+let%expect_test "run_with_progress invokes callback after each batch" = begin
   let simple_tree = Searchspace.(
     alt [
       return "solution_a";
@@ -163,13 +163,24 @@ let%expect_test "run_with_progress reports after each batch" = begin
   ) in
   let est = create simple_tree in
   let reports = ref [] in
-  let on_progress p =
+  run_with_progress ~batch_size:3 (fun p ->
     reports := !reports @ [p.materialized_nodes]
-  in
-  run_with_progress ~on_progress ~batch_size:5 est;
-  Printf.printf "Reports collected: %d\n" (List.length !reports);
-  (* Should have one report per batch until complete *)
-  ...
+  ) est;
+  Printf.printf "Reports: %s\n" (String.concat ", " (List.map string_of_int !reports));
+  [%expect{|\n    Reports: 1, 3, ...\n  |}]
+end
+
+let%expect_test "run_with_progress uses default stdout printer when no callback" = begin
+  let simple_tree = Searchspace.(
+    alt [
+      return "solution_a";
+      return "solution_b";
+      empty
+    ]
+  ) in
+  let est = create simple_tree in
+  run_with_progress ~batch_size:3 est;
+  [%expect{|\n    [0.0%] materialized: 1, ETA: inf\n    [50.0%] materialized: 3, ETA: 1 s\n    ...\n  |}]
 end
 
 let%expect_test "run_with_progress stops when complete" = begin
@@ -177,20 +188,11 @@ let%expect_test "run_with_progress stops when complete" = begin
     alt [ return "sol"; empty ]
   ) in
   let est = create simple_tree in
-  let reports = ref [] in
-  run_with_progress ~on_progress:(fun p -> reports := !reports @ [p.materialized_nodes]) est;
+  run_with_progress ~batch_size:5 (fun p ->
+    reports := !reports @ [p.materialized_nodes]
+  ) est;
   Printf.printf "Final materialized: %d\n" (List.hd (List.rev !reports));
-  (* Should match total nodes in search space *)
-  ...
-end
-
-let%expect_test "run_with_progress prints to stdout by default" = begin
-  let simple_tree = Searchspace.(
-    alt [ return "sol"; empty ]
-  ) in
-  let est = create simple_tree in
-  run_with_progress ~batch_size:5 est; (* no callback, uses default printer *)
-  [%expect{|\n    [0.0%] materialized: 1, ETA: inf\n    ...\n  |}]
+  [%expect{|\n    Final materialized: X\n  |}]
 end
 ```
 
@@ -216,18 +218,20 @@ val format_time : float -> string
 (** [format_time seconds] produces a human-readable duration string. *)
 
 val run_with_progress :
-  ?on_progress:(progress -> unit) ->
   ?batch_size:int ->
+  ~(on_progress:(progress -> unit)) ->
   'a t -> unit
-(** [run_with_progress ~on_progress ~batch_size est] runs batches of samples, reporting progress after each batch.
-    Stops when the estimator is complete. If [on_progress] is not provided, prints to stdout. *)
+(** [run_with_progress ~batch_size ~on_progress est] runs batches of samples, invoking the callback
+    after each batch with a progress record. Stops when the estimator is complete.
+    The default callback prints to stdout. For custom behavior, pass your own function —
+    write to a file, send over network, log as CSV — whatever the caller needs. *)
 ```
 
 ### Why a Wrapper, Not an Estimator Change?
 
 - **No changes to `'a t`** — the estimator stays pure and unchanged
 - **Progress is caller responsibility** — they already have `estimates est` for data, and can track time externally
-- **Flexible** — callers can use `make_progress` directly for custom reporting, or use `run_with_progress` for the common case
+- **Flexible** — callers can use `make_progress` directly for custom reporting (e.g., writing to a file, sending over network), or use `run_with_progress` for the common stdout case
 - **No callback overhead** — progress is only computed when explicitly requested, not on every sample
 
 ### Progress Percentage Rationale
