@@ -6,7 +6,7 @@ let format_number n =
   else
     Int64.to_string (Int64.of_float n)
 
-let batch_size = 5000
+let batch_size = 1000
 
 let () =
   if Array.length Sys.argv <> 2 then begin
@@ -20,8 +20,8 @@ let () =
   let searchspace = Puzzle.solve puzzle in
   let estimator = Stochastic_estimator.create ~selector:Stochastic_estimator.probabilistic_undersampled_selector searchspace in
   
-  Printf.printf "%-5s | %7s | %12s | %12s | %8s | %10s | %9s | %-10s | %s\n" "Batch" "Samples" "Nodes Est" "Fails Est" "Sols Est" "Materialized" "%Complete" "Elapsed" "ETA";
-  Printf.printf "------|-------|------------|------------|--------|----------|---------|----------|------------------\n";
+  Printf.printf "%-5s | %-7s | %-12s | %-12s | %-8s | %-12s | %-9s | %-10s | %s\n" "Batch" "Samples" "Nodes Est" "Fails Est" "Sols Est" "Materialized" "%Complete" "Elapsed" "ETA";
+  Printf.printf "----- | ------- | ------------ | ------------ | -------- | ------------ | --------- | ---------- | ------------------\n";
   
   let batch_count = ref 0 in
   let total_samples = ref 0 in
@@ -29,7 +29,7 @@ let () =
     incr batch_count;
     total_samples := !total_samples + batch_size;
     let est = Stochastic_estimator.estimates estimator in
-    Printf.printf "%-5d | %7d | %12s | %12s | %8s | %10d | %9.2e%% | %-10s | %s\n%!"
+    Printf.printf "%-5d | %-7d | %12s | %12s | %-8s | %-12d | %9.2e%% | %-10s | %s\n%!"
       !batch_count !total_samples
       (format_number est.nodes) (format_number est.fails) (format_number est.solutions)
       p.materialized_nodes
