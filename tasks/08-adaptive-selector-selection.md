@@ -207,6 +207,9 @@ let memory_aware_selector ?(threshold = 0.8) (node : 'a node) : int =
     in
     let best_idx = ref (-1) in
     let best_estimate = ref Float.infinity in
+    (* Pick child with lowest remaining work; +inf for unmaterialized children *)
+    let best_idx = ref (-1) in
+    let best_estimate = ref Float.infinity in
     for i = 0 to Array.length children - 1 do
       match children.(i) with
       | Some child ->
@@ -218,10 +221,10 @@ let memory_aware_selector ?(threshold = 0.8) (node : 'a node) : int =
               best_estimate := remaining_work
             )
           )
-      | None -> ()  (* Unmaterialized — treat as infinite work, skip *)
+      | None -> ()  (* Unmaterialized — estimate is +inf, skip *)
     done;
     if !best_idx = -1 then (
-      (* All children are unmaterialized — no information to distinguish, pick any *)
+      (* All children are unmaterialized — tie-break randomly *)
       Random.int (Array.length children)
     ) else !best_idx
   ) else (
@@ -234,12 +237,11 @@ let memory_aware_selector ?(threshold = 0.8) (node : 'a node) : int =
 
 The greedy completion behavior uses **remaining unmaterialized work** (not total estimate):
 - For each child, calculate: `unmaterialized_work = nodes_estimate - materialized_nodes`
+- For `None` (unmaterialized) children, the estimate is `+inf` — we don't know how much work they have yet
 - Pick the child with the **smallest** remaining work — the branch closest to completion
-- Skip fully sampled/completed nodes (they have zero unmaterialized children)
-- Treat `None` (unmaterialized) as infinite work — don't pick unexplored branches
-- **Caveat**: if all children are `None` (first visit to this node), pick any child at random — no information available to distinguish them
+- **Tie-break**: if multiple children have the same remaining work (including all `None`), pick randomly
 
-This is the exact opposite of undersampled:
+This is a single unified algorithm — same logic applies to all children:
 - **Undersampled**: pick from children with fewest samples (spread thin)
 - **Greedy completion**: pick child with least remaining unmaterialized work (concentrate to finish)
 
@@ -264,14 +266,20 @@ Stochastic_estimator.run_with_progress ~batch_size:5000 est
 
 ### Reusing Existing Infrastructure
 
-The existing `Searchspace.limit_on_low_memory` function already provides the memory-to-limit mapping. We can adapt it for reference:
+The existing `Searchspace.limit_on_low_memory` function already provides the memory measurement logic (reading `/proc/meminfo` via `memfree.ml`). We can reuse the memory ratio calculation, but **not** the limit function itself.
+
+The solver's `limit_on_low_memory` scales from 0 to infinity — smoothly amping up pressure to force DFS as memory fills. That was designed for `breadth_search` where the limit controls exploration breadth.
+
+Task 8 is different: it's a **hard switch** between two selector functions. We just need the memory ratio (e.g., 0.85 = 85% used) and compare it directly against a threshold:
 
 ```ocaml
-(* Reference from solve_file.ml — shows the pattern *)
-let memory_limit = Searchspace.limit_on_low_memory ~max_memory_ratio:0.95
+(* Reuse: memory ratio calculation from memfree *)
+let memory_ratio = (* ... from memfree.ml ... *) in
+(* Hard switch: simple threshold comparison *)
+if memory_ratio > 0.85 then greedy_selector else undersampled_selector
 ```
 
-The `memory_aware_selector` follows the same pattern but applies it at the selector level.
+No scaling, no infinity — just a percentage threshold.
 
 ## Files to Modify
 
@@ -296,16 +304,8 @@ A selector function is the simplest possible API addition:
 - No new types, no changes to `create`, no changes to `run_with_progress`
 - Users just pass a different selector function — everything else works the same
 
-### Hysteresis (Optional)
-
-To avoid thrashing between modes, consider hysteresis:
-- Switch to greedy at 80% memory usage (threshold)
-- Switch back to undersampled only when below 50% (after pruning freed memory)
-
-This prevents rapid mode switching that could waste samples. Implementation: store the last-used strategy in a mutable ref and only switch when memory crosses a different threshold on each direction.
-
 ### Performance Considerations
 
 - Memory readings should be cached (like `memfree` does) — not read from `/proc/meminfo` on every selector call
-- The greedy path is O(n) per node (scans children for lowest estimate), vs O(1) for undersampled. This is acceptable since it only runs when memory pressure is detected, not on every sample
+- Both selectors are O(n) per node where n = number of children — both iterate over all children, calculate a metric for each, and pick the minimum. The greedy path does slightly more arithmetic per child (subtraction + float conversion), but it's the same algorithmic complexity.
 - The undersampled path delegates to the existing `undersampled_selector` — no performance regression when memory is plentiful
