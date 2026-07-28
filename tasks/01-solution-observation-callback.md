@@ -1,5 +1,7 @@
 # Task 1: Solution Observation Callback
 
+**Status**: `[x]` Done ✓
+
 ## Goal
 
 Extend the incremental estimator API to allow an optional callback function that receives solutions as they are discovered during sampling. This enables real-time observation of solutions without waiting for the entire estimation to complete.

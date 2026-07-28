@@ -17,7 +17,7 @@ The goal is to enhance the existing `stochastic_estimator.ml` module with:
 
 | # | Task | Status |
 |---|------|--------|
-| 1 | [Solution Observation Callback](01-solution-observation-callback.md) | Not Started |
+| 1 | [Solution Observation Callback](01-solution-observation-callback.md) | Done ✓ |
 | 2 | [Progress Monitoring & Logging](02-progress-monitoring-and-logging.md) | Not Started |
 | 3 | [State Serialization - Decision Path Encoding](03-state-serialization-decision-paths.md) | Not Started |
 | 4 | [State Deserialization - Tree Recreation](04-state-deserialization-tree-recreation.md) | Not Started |
