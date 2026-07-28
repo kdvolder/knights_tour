@@ -37,19 +37,14 @@ let () =
     ~selector:Stochastic_estimator.undersampled_selector
     ~on_solution
     pentomino_space in
-  
-  Printf.printf "*** FOCUSING ON SEED 7 - THE BIG DROP ***\n";
-  Printf.printf "Sample 1 -> 2: 187,649 nodes -> 5,390 nodes (97%% drop)\n\n";
-  
-  let batch_size = 1000 in
-  for i = 1 to 20 do
-    ignore (Stochastic_estimator.sample batch_size est);
+    
+  let batch_size = 5000 in
+  Stochastic_estimator.run_with_progress ~batch_size ~on_progress:(fun p ->
     let current_estimates = Stochastic_estimator.estimates est in
-    let percentage = (float_of_int current_estimates.materialized_nodes) /. (float_of_int true_values.nodes) *. 100.0 in
     let stats = Stochastic_estimator.analyze_materialized est in
     
-    Printf.printf "=== BATCH %d (total samples: %d, coverage: %.1f%%) ===\n" 
-      i (i * batch_size) percentage;
+    Printf.printf "[%.1f%%] ETA: %s\n" p.progress_percent (Stochastic_estimator.format_time p.estimated_remaining_seconds);
+    Printf.printf "=== BATCH ===\n";
     Printf.printf "Estimates: nodes=%.0f, fails=%.1f, solutions=%.1f\n" 
       current_estimates.nodes current_estimates.fails current_estimates.solutions;
     Printf.printf "Materialized: %d nodes\n" stats.total_materialized;
@@ -69,6 +64,6 @@ let () =
       Printf.printf "%5d | %9d | %13d\n" depth fail_count sol_count
     done;
     Printf.printf "\n";
-  done;
+    flush stdout
+  ) est;
   
-  Printf.printf "Debug complete.\n"

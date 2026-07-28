@@ -19,20 +19,24 @@ let () =
   in
   let searchspace = Puzzle.solve puzzle in
   let estimator = Stochastic_estimator.create ~selector:Stochastic_estimator.probabilistic_undersampled_selector searchspace in
-  let space_complete = ref false in
-  let samples = ref 0 in
-  Printf.printf "Batch | Samples | Nodes Est  | Fails Est  | Sols Est | Materialized | %%Complete\n";
-  Printf.printf "------|---------|------------|------------|----------|-------------|----------\n";
-  let batch = ref 1 in
-  while not !space_complete do
-    space_complete := Stochastic_estimator.sample batch_size estimator;
-    samples := !samples + batch_size;
+  
+  Printf.printf "Batch | Samples | Nodes Est  | Fails Est  | Sols Est | Materialized | %%Complete | ETA\n";
+  Printf.printf "------|---------|------------|------------|----------|-------------|----------|------------------\n";
+  
+  let batch_count = ref 0 in
+  let total_samples = ref 0 in
+  Stochastic_estimator.run_with_progress ~batch_size ~on_progress:(fun p ->
+    incr batch_count;
+    total_samples := !total_samples + batch_size;
     let est = Stochastic_estimator.estimates estimator in
-    let percent_complete =
-      if est.nodes > 0. then (float_of_int est.materialized_nodes /. est.nodes) *. 100.
-      else 0.
-    in
-    Printf.printf "%5d | %7d | %10s | %10s | %8s | %11d | %10.2e%%\n%!"
-      !batch !samples (format_number est.nodes) (format_number est.fails) (format_number est.solutions) est.materialized_nodes percent_complete;
-    batch := !batch + 1;
-  done;
+    Printf.printf "%5d | %7d | %10s | %10s | %8s | %11d | %9.2e%% | %s\n%!"
+      !batch_count !total_samples
+      (format_number est.nodes) (format_number est.fails) (format_number est.solutions)
+      p.materialized_nodes p.progress_percent
+      (Stochastic_estimator.format_time p.estimated_remaining_seconds);
+    flush stdout
+  ) estimator;
+  
+  (* Final report *)
+  let est = Stochastic_estimator.estimates estimator in
+  Printf.printf "\nDone! Final estimates: nodes=%.0e, fails=%.0e, solutions=%.1f\n" est.nodes est.fails est.solutions;
