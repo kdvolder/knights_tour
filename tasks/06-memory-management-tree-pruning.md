@@ -15,7 +15,8 @@ The key insight: **once a node is marked `isCompleted = true`, we will never tra
 **Preserved (needed for continued estimation):**
 - `node_view` - to know how many children exist (for selector)
 - `samples`, `nodes_estimate`, `fail_estimate`, `solution_estimate` - for parent statistics
-- `materialized_nodes` count - for progress tracking
+- `materialized_nodes` count - total nodes ever created (for progress tracking)
+- `pruned_nodes` count - how many of those have been pruned (for memory accounting)
 
 **Can be pruned (not needed after completion):**
 - `children` array - all children are completed, won't be traversed again
@@ -23,32 +24,32 @@ The key insight: **once a node is marked `isCompleted = true`, we will never tra
 
 ### Compact Representation
 
-After pruning, replace the children array with a compact summary:
+After pruning, replace the children array with a unit variant:
 
 ```ocaml
 type 'a node = {
   node_view : 'a Searchspace.node_view;
   mutable isCompleted : bool;
-  mutable children : 'a node option array | Pruned of estimates_summary;
+  mutable children : 'a node option array | Pruned;
   mutable samples : int;
   mutable nodes_estimate : float;
   mutable fail_estimate : float;
   mutable solution_estimate : float;
-  mutable materialized_nodes : int;
-}
-
-and estimates_summary = {
-  total_samples : int;
-  total_nodes_estimate : float;
-  total_fail_estimate : float;
-  total_solution_estimate : float;
-  total_materialized_nodes : int;
+  mutable materialized_nodes : int;   (* total nodes ever created *)
+  mutable pruned_nodes : int;          (* how many of those have been pruned *)
 }
 ```
 
-When `children` is `Pruned(summary)`, it means:
+**Why two counters?**
+- `materialized_nodes` stays constant after pruning — it represents total work done, useful for progress tracking
+- `pruned_nodes` increases as we reclaim memory — the difference (`materialized_nodes - pruned_nodes`) tells you how much is still materialized
+- Pruning is an optimization, not a reversal — conceptually the nodes were explored and completed; we just stop keeping their structure in memory
+
+When `children` is `Pruned`, it means:
 - All children have been fully explored and pruned
-- The summary contains aggregate statistics that parents need
+- **No summary is needed** — the parent node already absorbed all statistics (samples, estimates, materialized_nodes) during `walk` recursion
+- The selector only needs `node_view` (already on the parent) and skips completed nodes via `isCompleted`
+- Pruning simply frees the child node structures; nothing is lost because parents already have everything they need
 
 ## Acceptance Criteria
 
@@ -188,28 +189,9 @@ if is_last_child_completed then (
 )
 ```
 
-### Prune Function
+### Walk Modification (Pruning Hotspot)
 
-```ocaml
-let rec prune_node (node : 'a node) : unit =
-  if not node.isCompleted then ()
-  else (
-    (* Compute aggregate summary from current statistics *)
-    let summary = {
-      total_samples = node.samples;
-      total_nodes_estimate = node.nodes_estimate;
-      total_fail_estimate = node.fail_estimate;
-      total_solution_estimate = node.solution_estimate;
-      total_materialized_nodes = node.materialized_nodes;
-    } in
-    (* Replace children array with Pruned variant *)
-    node.children <- Pruned summary
-  )
-```
-
-### Walk Modification
-
-In `walk`, after the loop that processes children, check if all are completed:
+In `walk`, after the loop that processes children, check if all are completed. If so, prune inline:
 
 ```ocaml
 let rec walk (selector : 'a child_selector) (on_solution : 'a -> unit) (node : 'a node) : unit =
@@ -231,20 +213,58 @@ let rec walk (selector : 'a child_selector) (on_solution : 'a -> unit) (node : '
           | None -> ()  (* Unmaterialized, skip *)
         done;
         
-        (* If all children completed, prune this node *)
+        (* Pruning hotspot: all children completed, prune this node *)
         if !completed_count = num_children then (
           node.isCompleted <- true;
-          prune_node node
+          (* Nodes freed = all descendants (materialized_nodes - self) *)
+          node.pruned_nodes <- node.materialized_nodes - 1;
+          node.children <- Pruned
+        )
+      )
+```
+
+Note: `prune_node` is recursive — when a parent completes and gets pruned, all its already-pruned children are counted but not re-pruned (they're already `Pruned`). The count includes the node itself plus all descendants that are in `Pruned` state.
+
+### Walk Modification (Pruning Hotspot)
+
+In `walk`, after the loop that processes children, check if all are completed. If so, prune inline:
+
+```ocaml
+let rec walk (selector : 'a child_selector) (on_solution : 'a -> unit) (node : 'a node) : unit =
+  match node.node_view with
+  | Result _ -> ()  (* Already a leaf *)
+  | Fail -> ()       (* Already failed *)
+  | Fork choices ->
+      if node.isCompleted then ()  (* Already pruned, should not reach here *)
+      else (
+        let children = node.children in
+        let num_children = Array.length children in
+        let completed_count = ref 0 in
+        
+        for i = 0 to num_children - 1 do
+          match children.(i) with
+          | Some child ->
+              walk selector on_solution child;
+              if child.isCompleted then incr completed_count
+          | None -> ()  (* Unmaterialized, skip *)
+        done;
+        
+        (* Pruning hotspot: all children completed, prune this node *)
+        if !completed_count = num_children then (
+          node.isCompleted <- true;
+          (* Nodes freed = all descendants (materialized_nodes - self) *)
+          node.pruned_nodes <- node.materialized_nodes - 1;
+          node.children <- Pruned
         )
       )
 ```
 
 ### Critical Invariant: Pruned Node Traversal
 
-If `walk` ever reaches a node with `children = Pruned _`, it's a bug (the selector should have skipped this completed node). Raise an exception:
+If `walk` ever reaches a node with `children = Pruned`, it's a bug (the selector should have skipped this completed node). Raise an exception:
 
 ```ocaml
-| Pruned _ -> 
+| Pruned -> 
     invalid_arg "Stochastic_estimator: attempted to traverse pruned node - this is a bug"
 ```
 
@@ -260,8 +280,8 @@ If `walk` ever reaches a node with `children = Pruned _`, it's a bug (the select
 
 ## Files to Modify
 
-- `searchspace/stochastic_estimator.ml` - implementation
-- `searchspace/stochastic_estimator.mli` - interface update (add `estimates_summary` type)
+- `searchspace/stochastic_estimator.ml` - implementation (add `Pruned` variant, `pruned_nodes` field, prune logic in `walk`)
+- `searchspace/stochastic_estimator.mli` - interface update (add `Pruned` to children type, export `pruned_nodes`)
 
 ## Files to Create
 
