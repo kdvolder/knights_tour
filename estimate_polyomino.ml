@@ -20,8 +20,8 @@ let () =
   let searchspace = Puzzle.solve puzzle in
   let estimator = Stochastic_estimator.create ~selector:Stochastic_estimator.probabilistic_undersampled_selector searchspace in
   
-  Printf.printf "Batch | Samples | Nodes Est  | Fails Est  | Sols Est | Materialized | %%Complete | ETA\n";
-  Printf.printf "------|---------|------------|------------|----------|-------------|----------|------------------\n";
+  Printf.printf "%-5s | %7s | %12s | %12s | %8s | %10s | %9s | %-10s | %s\n" "Batch" "Samples" "Nodes Est" "Fails Est" "Sols Est" "Materialized" "%Complete" "Elapsed" "ETA";
+  Printf.printf "------|-------|------------|------------|--------|----------|---------|----------|------------------\n";
   
   let batch_count = ref 0 in
   let total_samples = ref 0 in
@@ -29,10 +29,12 @@ let () =
     incr batch_count;
     total_samples := !total_samples + batch_size;
     let est = Stochastic_estimator.estimates estimator in
-    Printf.printf "%5d | %7d | %10s | %10s | %8s | %11d | %9.2e%% | %s\n%!"
+    Printf.printf "%-5d | %7d | %12s | %12s | %8s | %10d | %9.2e%% | %-10s | %s\n%!"
       !batch_count !total_samples
       (format_number est.nodes) (format_number est.fails) (format_number est.solutions)
-      p.materialized_nodes p.progress_percent
+      p.materialized_nodes
+      p.progress_percent
+      (Stochastic_estimator.format_time p.elapsed_seconds)
       (Stochastic_estimator.format_time p.estimated_remaining_seconds);
     flush stdout
   ) estimator;
