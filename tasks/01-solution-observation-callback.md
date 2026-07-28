@@ -23,9 +23,13 @@ The internal `walk` function traverses the search tree and counts solutions, but
 
 ## Implementation Process (TDD)
 
+Each phase follows the same rhythm: write tests that **fail** (red), then implement just enough to make them **pass** (green). Move to the next phase only when all tests in the current one pass.
+
 ### Phase 1: API Design Tests
 
-Write tests that define the desired API surface before implementation.
+**Goal**: Define the callback type and integrate it into `create` so that code compiles with or without a callback.
+
+**Acceptance**: All tests pass — meaning the API exists, compiles, and `create` works in both modes.
 
 ```ocaml
 (* Test: create with callback *)
@@ -43,7 +47,9 @@ end)
 
 ### Phase 2: Callback Invocation Tests
 
-Write tests that verify callback behavior.
+**Goal**: Make `walk` invoke the callback when a `Result` leaf is reached. Tests verify the callback fires at the right times with the right values.
+
+**Acceptance**: All tests pass — callback is called exactly once per solution found, receives the correct value, is never called for failures or forks.
 
 ```ocaml
 let%test_module "callback_invocation" = (module struct
@@ -66,15 +72,17 @@ end)
 
 ### Phase 3: Integration Tests
 
-Write tests that verify callback works within the full estimator workflow.
+**Goal**: Verify the callback works correctly in realistic usage patterns — different selectors, multiple `sample()` calls, and solution ordering.
+
+**Acceptance**: All tests pass — callback behaves correctly regardless of selector choice, accumulates across multiple `sample()` calls without losing or duplicating solutions.
 
 ```ocaml
 let%test_module "callback_integration" = (module struct
   (* Test: callback works with undersampled_selector *)
   let test_callback_with_undersampled () = ...
   
-  (* Test: callback works with uniform_selector *)
-  let test_callback_with_uniform () = ...
+  (* Test: callback works with probabilistic_undersampled_selector *)
+  let test_callback_with_probabilistic () = ...
   
   (* Test: callback works across multiple sample() calls *)
   let test_callback_across_multiple_samples () = ...
