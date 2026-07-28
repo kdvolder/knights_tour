@@ -933,3 +933,84 @@ let%expect_test "callback not called when no solutions exist" = begin
     Solutions:
   |}]
 end
+
+(** Phase 3: Integration Tests - callback works across selectors and multiple sample() calls *)
+
+let%expect_test "callback works with undersampled_selector" = begin
+  let simple_tree = Searchspace.(
+    alt [
+      return "sol_a";
+      return "sol_b";
+      empty
+    ]
+  ) in
+  let solutions = ref [] in
+  let on_solution x = solutions := !solutions @ [x] in
+  let est = create ~selector:undersampled_selector ~on_solution simple_tree in
+  ignore (sample 10 est);
+  Printf.printf "Solutions: %s\n" (String.concat ", " !solutions);
+  [%expect{|
+    Solutions: sol_a, sol_b
+  |}]
+end
+
+let%expect_test "callback works with probabilistic_undersampled_selector" = begin
+  let simple_tree = Searchspace.(
+    alt [
+      return "sol_a";
+      return "sol_b";
+      empty
+    ]
+  ) in
+  let solutions = ref [] in
+  let on_solution x = solutions := !solutions @ [x] in
+  let est = create ~selector:probabilistic_undersampled_selector ~on_solution simple_tree in
+  ignore (sample 10 est);
+  Printf.printf "Solutions: %s\n" (String.concat ", " !solutions);
+  [%expect{|
+    Solutions: sol_a, sol_b
+  |}]
+end
+
+let%expect_test "callback works across multiple sample() calls" = begin
+  let simple_tree = Searchspace.(
+    alt [
+      return "sol_a";
+      return "sol_b";
+      empty
+    ]
+  ) in
+  let solutions = ref [] in
+  let on_solution x = solutions := !solutions @ [x] in
+  let est = create ~on_solution simple_tree in
+  ignore (sample 1 est);
+  Printf.printf "After sample 1: %s\n" (String.concat ", " !solutions);
+  ignore (sample 1 est);
+  Printf.printf "After sample 2: %s\n" (String.concat ", " !solutions);
+  ignore (sample 10 est);
+  Printf.printf "After sample 3: %s\n" (String.concat ", " !solutions);
+  [%expect{|
+    After sample 1:
+    After sample 2: sol_a
+    After sample 3: sol_a, sol_b
+  |}]
+end
+
+let%expect_test "callback receives solutions in sampling order" = begin
+  let simple_tree = Searchspace.(
+    alt [
+      return "first";
+      return "second";
+      empty
+    ]
+  ) in
+  let solutions = ref [] in
+  let on_solution x = solutions := !solutions @ [x] in
+  Random.full_init [|12345|];
+  let est = create ~on_solution simple_tree in
+  ignore (sample 10 est);
+  Printf.printf "Solutions: %s\n" (String.concat ", " !solutions);
+  [%expect{|
+    Solutions: first, second
+  |}]
+end
