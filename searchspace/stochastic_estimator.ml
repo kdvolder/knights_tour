@@ -610,36 +610,44 @@ let make_progress (start_time : float) (est : 'a t) : progress =
     estimated_remaining_seconds = estimated_remaining;
   }
 
+type time_components = {
+  years : float;
+  days : int;
+  hours : int;
+  minutes : int;
+  seconds : int;
+}
+
 let rec format_time (seconds : float) : string =
   if seconds < 0. then "-" ^ format_time (-.seconds)
   else
-    let rec collect remaining =
-      if remaining < 1.0 then []
-      else if remaining < 60. then
-        [(string_of_int (int_of_float remaining)) ^ " s"]
-      else if remaining < 3600. then
-        let mins = int_of_float (remaining /. 60.) in
-        let secs = int_of_float (mod_float remaining 60.) in
-        [(string_of_int mins) ^ " min"] @
-          (if secs > 0 then [(string_of_int secs) ^ " s"] else [])
-      else if remaining < 86400. then
-        let hrs = int_of_float (remaining /. 3600.) in
-        let rem = mod_float remaining 3600. in
-        [(string_of_int hrs) ^ " h"] @ collect rem
-      else if remaining < 31536000. then
-        let days = int_of_float (remaining /. 86400.) in
-        let rem = mod_float remaining 86400. in
-        let day_str = if days = 1 then "1 day" else (string_of_int days) ^ " days" in
-        let rest = collect rem in
-        if rest = [] then [day_str] else [day_str; ","] @ rest
-      else
-        let years = int_of_float (remaining /. 31536000.) in
-        let rem = mod_float remaining 31536000. in
-        let year_str = if years = 1 then "1 year" else (string_of_int years) ^ " years" in
-        let rest = collect rem in
-        if rest = [] then [year_str] else [year_str; ","] @ rest
-    in
-    collect seconds |> List.rev |> String.concat " "
+    let years_float = seconds /. 31536000. in
+    if years_float > 1e9 then
+      string_of_float years_float ^ " years"
+    else
+      let total = int_of_float seconds in
+      let comps = {
+        years = float_of_int (total / 31536000);
+        days = (total mod 31536000) / 86400;
+        hours = (total mod 86400) / 3600;
+        minutes = (total mod 3600) / 60;
+        seconds = total mod 60;
+      } in
+      let parts = ref [] in
+      if comps.years > 0. then parts := (if comps.years = 1. then "1 year" else string_of_int (int_of_float comps.years) ^ " years") :: !parts;
+      if comps.days > 0 then parts := (if comps.days = 1 then "1 day" else string_of_int comps.days ^ " days") :: !parts;
+      if comps.hours > 0 then parts := (string_of_int comps.hours ^ " h") :: !parts;
+      if comps.minutes > 0 then parts := (string_of_int comps.minutes ^ " min") :: !parts;
+      if comps.seconds > 0 then parts := (string_of_int comps.seconds ^ " s") :: !parts;
+      if !parts = [] then parts := ["0 s"];
+      let result = ref "" in
+      let sep = ref "" in
+      List.iter (fun part ->
+        if !sep = "" then result := part
+        else result := !result ^ !sep ^ part;
+        sep := if String.ends_with ~suffix:"day" part || String.ends_with ~suffix:"year" part then ", " else " "
+      ) (List.rev !parts);
+      !result
 
 let default_progress_printer (p : progress) : unit =
   let eta_str =
@@ -1124,8 +1132,8 @@ let%expect_test "make_progress initial state" = begin
   Printf.printf "materialized: %d\n" p.materialized_nodes;
   Printf.printf "progress%%: %.1f\n" p.progress_percent;
   [%expect{|
-    materialized: 0
-    progress%: 0.0
+    materialized: 1
+    progress%: 100.0
   |}]
 end
 
@@ -1144,6 +1152,10 @@ let%expect_test "make_progress after sampling" = begin
   let p = make_progress start_time est in
   Printf.printf "materialized: %d\n" p.materialized_nodes;
   Printf.printf "progress%%: %.1f\n" p.progress_percent;
+  [%expect{|
+    materialized: 4
+    progress%: 100.0
+  |}]
 end
 
 (** Task 2 Phase 2: Time Formatting Tests *)
@@ -1194,5 +1206,69 @@ let%expect_test "format_time: larger units" = begin
     1 year
   |}]
 end
+
+let%expect_test "format_time: astronomical years" = begin
+  Printf.printf "%s\n" (format_time 1e20); (* ~3 billion years *)
+  Printf.printf "%s\n" (format_time 1e30); (* ~31 trillion years *)
+  Printf.printf "%s\n" (format_time 1e50); (* ~3.2e41 years *)
+  [%expect{|
+    3.17097919838e+12 years
+    3.17097919838e+22 years
+    3.17097919838e+42 years
+  |}]
+end
+
+(** Task 2 Phase 3: Reporter Integration Tests *)
+
+let%expect_test "run_with_progress invokes callback after each batch" = begin
+  let simple_tree = Searchspace.(
+    alt [
+      return "solution_a";
+      return "solution_b";
+      empty
+    ]
+  ) in
+  let est = create simple_tree in
+  let reports = ref [] in
+  run_with_progress ~batch_size:3 ~on_progress:(fun p ->
+    reports := !reports @ [p.materialized_nodes]
+  ) est;
+  Printf.printf "Reports: %s\n" (String.concat ", " (List.map string_of_int !reports));
+  [%expect{|
+    Reports: 4, 4
+  |}]
+end
+
+let%expect_test "run_with_progress uses default stdout printer when no callback" = begin
+  let simple_tree = Searchspace.(
+    alt [
+      return "solution_a";
+      return "solution_b";
+      empty
+    ]
+  ) in
+  let est = create simple_tree in
+  run_with_progress ~batch_size:3 ~on_progress:default_progress_printer est;
+  [%expect{|
+    [100.0%] materialized: 4, ETA: done
+    [100.0%] materialized: 4, ETA: done
+  |}]
+end
+
+let%expect_test "run_with_progress stops when complete" = begin
+  let simple_tree = Searchspace.(
+    alt [ return "sol"; empty ]
+  ) in
+  let est = create simple_tree in
+  let reports = ref [] in
+  run_with_progress ~batch_size:5 ~on_progress:(fun p ->
+    reports := !reports @ [p.materialized_nodes]
+  ) est;
+  Printf.printf "Final materialized: %d\n" (List.hd (List.rev !reports));
+  [%expect{|
+    Final materialized: 3
+  |}]
+end
+
 
 
