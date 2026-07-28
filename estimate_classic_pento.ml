@@ -63,7 +63,6 @@ let () =
       let sol_count = Hashtbl.find_opt sol_hist depth |> Option.value ~default:0 in
       Printf.printf "%5d | %9d | %13d\n" depth fail_count sol_count
     done;
-    Printf.printf "\n";
-    flush stdout
+    Printf.printf "\n%!"
   ) est;
   
