@@ -572,6 +572,98 @@ let analyze_materialized (est : 'a t) : materialized_stats =
 	in
 	{ total_materialized; max_depth; leaf_depths_fail = !fail_depths; leaf_depths_solution = !sol_depths; fork_depths = !fork_depths; avg_leaf_depth_fail; avg_leaf_depth_solution }
 
+(** Progress monitoring *)
+type progress = {
+  elapsed_seconds : float;
+  total_nodes_estimate : float;
+  fails_estimate : float;
+  solutions_estimate : float;
+  materialized_nodes : int;
+  progress_percent : float;
+  estimated_remaining_seconds : float;
+}
+
+let make_progress (start_time : float) (est : 'a t) : progress =
+  let now = Unix.gettimeofday () in
+  let elapsed = now -. start_time in
+  let ests = estimates est in
+  let progress_percent =
+    if ests.nodes > 0. then
+      (float_of_int ests.materialized_nodes) /. ests.nodes *. 100.0
+    else 0.0
+  in
+  let estimated_remaining =
+    if progress_percent > 0. && progress_percent < 100. then
+      elapsed *. (100.0 /. progress_percent) -. elapsed
+    else if progress_percent >= 100. then
+      0.0
+    else
+      Float.infinity
+  in
+  {
+    elapsed_seconds = elapsed;
+    total_nodes_estimate = ests.nodes;
+    fails_estimate = ests.fails;
+    solutions_estimate = ests.solutions;
+    materialized_nodes = ests.materialized_nodes;
+    progress_percent;
+    estimated_remaining_seconds = estimated_remaining;
+  }
+
+let rec format_time (seconds : float) : string =
+  if seconds < 0. then "-" ^ format_time (-.seconds)
+  else
+    let rec collect remaining =
+      if remaining < 1.0 then []
+      else if remaining < 60. then
+        [(string_of_int (int_of_float remaining)) ^ " s"]
+      else if remaining < 3600. then
+        let mins = int_of_float (remaining /. 60.) in
+        let secs = int_of_float (mod_float remaining 60.) in
+        [(string_of_int mins) ^ " min"] @
+          (if secs > 0 then [(string_of_int secs) ^ " s"] else [])
+      else if remaining < 86400. then
+        let hrs = int_of_float (remaining /. 3600.) in
+        let rem = mod_float remaining 3600. in
+        [(string_of_int hrs) ^ " h"] @ collect rem
+      else if remaining < 31536000. then
+        let days = int_of_float (remaining /. 86400.) in
+        let rem = mod_float remaining 86400. in
+        let day_str = if days = 1 then "1 day" else (string_of_int days) ^ " days" in
+        let rest = collect rem in
+        if rest = [] then [day_str] else [day_str; ","] @ rest
+      else
+        let years = int_of_float (remaining /. 31536000.) in
+        let rem = mod_float remaining 31536000. in
+        let year_str = if years = 1 then "1 year" else (string_of_int years) ^ " years" in
+        let rest = collect rem in
+        if rest = [] then [year_str] else [year_str; ","] @ rest
+    in
+    collect seconds |> List.rev |> String.concat " "
+
+let default_progress_printer (p : progress) : unit =
+  let eta_str =
+    if p.progress_percent >= 100. then "done"
+    else if Float.is_infinite p.estimated_remaining_seconds then "inf"
+    else format_time p.estimated_remaining_seconds
+  in
+  Printf.printf "[%5.1f%%] materialized: %d, ETA: %s\n" p.progress_percent p.materialized_nodes eta_str
+
+let run_with_progress ?(batch_size = 100) ~(on_progress : progress -> unit) (est : 'a t) : unit =
+  let start_time = Unix.gettimeofday () in
+  let rec loop () =
+    if not est.root.isCompleted then (
+      ignore (sample batch_size est);
+      let p = make_progress start_time est in
+      on_progress p;
+      loop ()
+    )
+  in
+  loop ();
+  (* Final report when complete *)
+  let p = make_progress start_time est in
+  on_progress p
+
 let%expect_test "incremental estimator API on unbalanced searchspace" =
   let right_heavy_space = (
     let* n1 = int_range 1 100 in
@@ -1014,3 +1106,43 @@ let%expect_test "callback receives solutions in sampling order" = begin
     Solutions: first, second
   |}]
 end
+
+(** Task 2 Phase 1: Progress Data Structure Tests *)
+
+let%expect_test "make_progress initial state" = begin
+  let simple_tree = Searchspace.(
+    alt [
+      return "solution_a";
+      return "solution_b";
+      empty
+    ]
+  ) in
+  let est = create simple_tree in
+  let start_time = Unix.gettimeofday () in
+  ignore (Unix.sleepf 0.1);
+  let p = make_progress start_time est in
+  Printf.printf "materialized: %d\n" p.materialized_nodes;
+  Printf.printf "progress%%: %.1f\n" p.progress_percent;
+  [%expect{|
+    materialized: 0
+    progress%: 0.0
+  |}]
+end
+
+let%expect_test "make_progress after sampling" = begin
+  let simple_tree = Searchspace.(
+    alt [
+      return "solution_a";
+      return "solution_b";
+      empty
+    ]
+  ) in
+  let est = create simple_tree in
+  ignore (sample 10 est);
+  let start_time = Unix.gettimeofday () in
+  ignore (Unix.sleepf 0.1);
+  let p = make_progress start_time est in
+  Printf.printf "materialized: %d\n" p.materialized_nodes;
+  Printf.printf "progress%%: %.1f\n" p.progress_percent;
+end
+
