@@ -221,8 +221,8 @@ let memory_aware_selector ?(threshold = 0.8) (node : 'a node) : int =
       | None -> ()  (* Unmaterialized — treat as infinite work, skip *)
     done;
     if !best_idx = -1 then (
-      (* All children are unmaterialized — fall back to undersampled behavior *)
-      undersampled_selector node
+      (* All children are unmaterialized — no information to distinguish, pick any *)
+      Random.int (Array.length children)
     ) else !best_idx
   ) else (
     (* Memory plentiful → undersampled: pick child with fewest samples *)
@@ -237,7 +237,7 @@ The greedy completion behavior uses **remaining unmaterialized work** (not total
 - Pick the child with the **smallest** remaining work — the branch closest to completion
 - Skip fully sampled/completed nodes (they have zero unmaterialized children)
 - Treat `None` (unmaterialized) as infinite work — don't pick unexplored branches
-- **Caveat**: if all children are `None` (first visit to this node), fall back to undersampled behavior
+- **Caveat**: if all children are `None` (first visit to this node), pick any child at random — no information available to distinguish them
 
 This is the exact opposite of undersampled:
 - **Undersampled**: pick from children with fewest samples (spread thin)
