@@ -11,7 +11,8 @@ The goal is to enhance the existing `stochastic_estimator.ml` module with:
 3. **State persistence** - serialize/deserialize estimator state for restart capability
 4. **Auto-save with crash resistance** - periodic saves that survive crashes via atomic swap
 5. **Memory management** - prune fully-explored branches to reduce memory usage
-6. **CLI integration** - command-line executable similar to solve_file.ml
+6. **Adaptive selector selection** - monitor memory pressure, switch between broad/narrow exploration to enable pruning
+7. **CLI integration** - command-line executable similar to solve_file.ml
 
 ## Task Index
 
@@ -23,6 +24,7 @@ The goal is to enhance the existing `stochastic_estimator.ml` module with:
 | 4 | [State Deserialization - Tree Recreation](04-state-deserialization-tree-recreation.md) | Not Started |
 | 5 | [Auto-save with Crash Resistance](05-auto-save-with-crash-resistance.md) | Not Started |
 | 6 | [Memory Management - Tree Pruning](06-memory-management-tree-pruning.md) | Not Started |
+| 8 | [Adaptive Selector Selection](08-adaptive-selector-selection.md) | Not Started |
 | 7 | [CLI Integration](07-cli-integration.md) | Not Started |
 
 ## Task Dependencies
@@ -37,16 +39,17 @@ Task 2 (Progress) ──▶ Task 5 (Auto-save)
 Task 3 (Serialize) ──▶ Task 4 (Deserialize)
     │                       │
     ▼                       ▼
-Task 6 (Pruning) ────────┘
-    │
-    ▼
+Task 6 (Pruning) ──▶ Task 8 (Adaptive Selector)
+    │                       │
+    ▼                       ▼
 Task 7 (CLI) - depends on all above
 ```
 
 - **Tasks 1-2**: Can be done in parallel (both modify the estimator API)
 - **Task 3→4**: Serialization must come before deserialization
 - **Task 5**: Depends on Tasks 3+4 (needs serialization to save)
-- **Task 6**: Can be done in parallel with Tasks 3-5 (modifies tree structure)
+- **Task 6→8**: Pruning must come before adaptive selector (selector needs pruning to be effective)
+- **Task 8**: Depends on Task 6 — adaptive selection only makes sense if completed branches can be pruned
 - **Task 7**: Depends on all other tasks (integrates everything)
 
 ## Task Format
