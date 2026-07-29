@@ -2,41 +2,41 @@
 
 ## Goal
 
-Implement automatic pruning of fully-explored branches from the estimator's materialized tree to reduce memory consumption. When a node becomes `isCompleted = true`, its children array is immediately replaced with a compact summary, freeing the child node structures.
+Implement automatic pruning of fully-explored branches from the estimator's materialized tree to reduce memory consumption. When a node becomes `isCompleted = true`, its children array is immediately replaced with an empty array, freeing the child node structures to GC.
 
 ## Background
 
-The current estimator's tree (`'a node`) grows monotonically - nodes are only added, never removed. For very large search spaces that take a long time to estimate (e.g., hexominos on oracle2), this leads to significant memory usage.
+The current estimator's tree (`'a node`) grows monotonically — nodes are only added, never removed. For very large search spaces that take a long time to estimate (e.g., hexominos on oracle2), this leads to significant memory usage.
 
 The key insight: **once a node is marked `isCompleted = true`, we will never traverse through it again during sampling**. The undersampled selector only considers nodes with unmaterialized children or incomplete subtrees. A completed node's statistics (samples, estimates) are still needed for parent calculations, but the actual tree structure below it is not.
 
 ### What Gets Pruned vs Preserved
 
 **Preserved (needed for continued estimation):**
-- `node_view` - to know how many children exist (for selector)
-- `samples`, `nodes_estimate`, `fail_estimate`, `solution_estimate` - for parent statistics
-- `materialized_nodes` count - total nodes ever created (for progress tracking)
-- `pruned_nodes` count - how many of those have been pruned (for memory accounting)
+- `node_view` — to know how many children exist (for selector)
+- `samples`, `nodes_estimate`, `fail_estimate`, `solution_estimate` — for parent statistics
+- `materialized_nodes` count — total nodes ever created (for progress tracking)
+- `pruned_nodes` count — how many descendants have been pruned (for memory accounting)
 
 **Can be pruned (not needed after completion):**
-- `children` array - all children are completed, won't be traversed again
-- The actual child node structures (freed by GC)
+- `children` array — all children are completed, won't be traversed again
+- The actual child node structures (freed by GC when no longer referenced)
 
 ### Compact Representation
 
-After pruning, replace the children array with a unit variant:
+After pruning, replace the children array with an empty array:
 
 ```ocaml
 type 'a node = {
   node_view : 'a Searchspace.node_view;
   mutable isCompleted : bool;
-  mutable children : 'a node option array | Pruned;
+  mutable children : 'a node option array;   (* [||] after pruning *)
   mutable samples : int;
   mutable nodes_estimate : float;
   mutable fail_estimate : float;
   mutable solution_estimate : float;
   mutable materialized_nodes : int;   (* total nodes ever created *)
-  mutable pruned_nodes : int;          (* how many of those have been pruned *)
+  mutable pruned_nodes : int;          (* descendants freed by pruning *)
 }
 ```
 
@@ -45,7 +45,7 @@ type 'a node = {
 - `pruned_nodes` increases as we reclaim memory — the difference (`materialized_nodes - pruned_nodes`) tells you how much is still materialized
 - Pruning is an optimization, not a reversal — conceptually the nodes were explored and completed; we just stop keeping their structure in memory
 
-When `children` is `Pruned`, it means:
+When `children = [||]` (empty array), it means:
 - All children have been fully explored and pruned
 - **No summary is needed** — the parent node already absorbed all statistics (samples, estimates, materialized_nodes) during `walk` recursion
 - The selector only needs `node_view` (already on the parent) and skips completed nodes via `isCompleted`
@@ -67,220 +67,117 @@ When `children` is `Pruned`, it means:
    - After pruning, `samples`, estimates, and counts are unchanged
    - Parent nodes can still compute correct aggregate statistics
 
-### 6.2 Selector Safety
+### 6.2 `pruned_nodes` Propagation
 
-4. **Selector never selects through pruned nodes**:
-   - The undersampled selector (and all selectors) already skip completed nodes
+4. **Completed nodes track their own pruned count**:
+   - When a node is pruned, `pruned_nodes <- materialized_nodes - 1` (all descendants)
+
+5. **Incomplete nodes sum children's pruned counts**:
+   - When a node is not yet completed, `pruned_nodes` = sum of all children's `pruned_nodes`
+   - This ensures parents always reflect the total pruned descendants, even if only some children are pruned
+
+### 6.3 Selector Safety
+
+6. **Selector never selects through completed nodes**:
+   - The undersampled selector (and all selectors) already skip completed nodes via `isCompleted`
    - Since pruned nodes are always completed, they will never be selected
 
-5. **Traversing a pruned node raises an exception**:
-   - If somehow `walk` reaches a pruned node (bug), it raises an exception
-   - Never silently re-materialize or unprune
+7. **`walk` guards against traversing completed nodes**:
+   - `walk` checks `if node.isCompleted then ()` at the top of every fork branch
+   - No exception is raised — traversal simply returns immediately
 
-### 6.3 Memory Savings
+### 6.4 Memory Savings
 
-6. **Pruning reduces memory usage**:
+8. **Pruning reduces memory usage**:
    - Benchmarked on large search spaces
    - Memory reduction should be significant for deep, fully-explored trees
 
-7. **Pruning does not affect estimate accuracy**:
+9. **Pruning does not affect estimate accuracy**:
    - Estimates before and after pruning are identical
    - Continued sampling produces same results whether or not pruning occurred
 
-## Implementation Process (TDD)
-
-### Phase 1: Pruning Tests
-
-```ocaml
-let%test_module "pruning" = (module struct
-  
-  (* Test: completed node is pruned automatically *)
-  let test_auto_prune_on_completion () = 
-    (* Create estimator, sample until a subtree is completed *)
-    (* Verify that node's children array was replaced with Pruned summary *)
-    (* Verify statistics preserved: samples, estimates unchanged *)
-    ...
-  
-  (* Test: incomplete node is not pruned *)
-  let test_no_prune_incomplete () = 
-    (* Create estimator, sample partially (not all children explored) *)
-    (* Verify node's children array is still Children variant, not Pruned *)
-    ...
-  
-  (* Test: pruning preserves parent statistics *)
-  let test_parent_stats_preserved () = 
-    (* Create tree, sample until child subtree completes and prunes *)
-    (* Verify parent's aggregate estimates unchanged after prune *)
-    ...
-  
-  (* Test: deep tree pruning cascades *)
-  let test_deep_tree_pruning () = 
-    (* Create deep tree, sample until all branches complete *)
-    (* Verify all completed nodes are pruned recursively *)
-    ...
-end)
-```
-
-### Phase 2: Selector Safety Tests
-
-```ocaml
-let%test_module "selector_safety" = (module struct
-  
-  (* Test: selector never selects through pruned/completed nodes *)
-  let test_selector_avoids_completed () = 
-    (* Create estimator, sample until subtree is completed and pruned *)
-    (* Run many samples - verify selector never routes through pruned node *)
-    ...
-  
-  (* Test: traversing pruned node raises exception *)
-  let test_traverse_pruned_raises () = 
-    (* Create estimator, complete a subtree and prune it *)
-    (* Force walk to traverse the pruned node (simulate bug) *)
-    (* Verify exception is raised, not silent re-materialization *)
-    ...
-  
-  (* Test: estimates preserved after prune, no double-counting *)
-  let test_no_double_counting () = 
-    (* Sample until completion, verify pruning happened *)
-    (* Verify estimates match expected values exactly *)
-    ...
-end)
-```
-
-### Phase 3: Integration Tests
-
-```ocaml
-let%test_module "integration" = (module struct
-  
-  (* Test: continued sampling works after pruning *)
-  let test_sampling_after_prune () = 
-    (* Create tree, sample until partial completion and pruning *)
-    (* Continue sampling - verify new samples are added correctly *)
-    (* Verify estimates accumulate properly across prune boundary *)
-    ...
-  
-  (* Test: memory decreases after pruning *)
-  let test_memory_decrease () = 
-    (* Create large tree, measure memory *)
-    (* Sample until completion and pruning *)
-    (* Measure memory again - should be lower *)
-    ...
-  
-  (* Test: pruning does not affect estimate accuracy *)
-  let test_estimate_accuracy_preserved () = 
-    (* Create small tree with known true values *)
-    (* Sample until completion (with pruning) *)
-    (* Verify estimates match true values within tolerance *)
-    ...
-end)
-```
+10. **Oversampling is handled gracefully**:
+    - `sample` checks `est.root.isCompleted` and stops the outer loop
+    - No wasted work on an already-explored tree
 
 ## Implementation Details
 
-### Where Pruning Happens
-
-Pruning is triggered in `walk` when a node transitions to completed. The key location is after the last child of a fork node completes:
-
-```ocaml
-(* In walk, after processing all children *)
-if is_last_child_completed then (
-  node.isCompleted <- true;
-  prune_node node  (* Replace children array with Pruned summary *)
-)
-```
-
 ### Walk Modification (Pruning Hotspot)
 
-In `walk`, after the loop that processes children, check if all are completed. If so, prune inline:
+In `walk`, after processing a child, check if the node is now completed. If so, prune inline:
 
 ```ocaml
 let rec walk (selector : 'a child_selector) (on_solution : 'a -> unit) (node : 'a node) : unit =
   match node.node_view with
-  | Result _ -> ()  (* Already a leaf *)
-  | Fail -> ()       (* Already failed *)
+  | Result _ -> ()
+  | Fail -> ()
   | Fork choices ->
-      if node.isCompleted then ()  (* Already pruned, should not reach here *)
+      if node.isCompleted then ()   (* Guard: skip already-completed nodes *)
       else (
-        let children = node.children in
-        let num_children = Array.length children in
-        let completed_count = ref 0 in
-        
-        for i = 0 to num_children - 1 do
-          match children.(i) with
-          | Some child ->
-              walk selector on_solution child;
-              if child.isCompleted then incr completed_count
-          | None -> ()  (* Unmaterialized, skip *)
-        done;
-        
-        (* Pruning hotspot: all children completed, prune this node *)
-        if !completed_count = num_children then (
-          node.isCompleted <- true;
-          (* Nodes freed = all descendants (materialized_nodes - self) *)
-          node.pruned_nodes <- node.materialized_nodes - 1;
-          node.children <- Pruned
+        let chosen = select_child node in
+        let child_node = match node.children.(chosen) with
+          | Some child -> child
+          | None ->
+              let c = create_node (List.nth choices chosen) in
+              node.children.(chosen) <- Some c;
+              c
+        in
+        walk selector on_solution child_node;
+
+        (* Propagate pruned_nodes from child if it was pruned *)
+        if Array.length child_node.children = 0 then (
+          node.pruned_nodes <- node.pruned_nodes + child_node.pruned_nodes
+        );
+
+        (* Update all statistics from children *)
+        node.samples <- Array.fold_left (fun acc child_opt -> 
+          match child_opt with Some c -> acc + c.samples | None -> acc
+        ) 0 node.children;
+        node.nodes_estimate <- 1. +. children_estimate node.children (fun c -> c.nodes_estimate);
+        node.fail_estimate <- children_estimate node.children (fun c -> c.fail_estimate);
+        node.solution_estimate <- children_estimate node.children (fun c -> c.solution_estimate);
+        node.materialized_nodes <- 1 + Array.fold_left (fun acc child_opt -> 
+          match child_opt with Some c -> acc + c.materialized_nodes | None -> acc
+        ) 0 node.children;
+
+        (* Update isCompleted: true if all children are materialized and completed *)
+        node.isCompleted <-
+          Array.length node.children > 0 &&
+          Array.for_all (function | Some c -> c.isCompleted | None -> false) node.children;
+
+        (* Pruning hotspot: if all children completed, prune this node *)
+        if node.isCompleted then (
+          node.pruned_nodes <- node.materialized_nodes - 1;   (* all descendants *)
+          node.children <- [||]                                 (* free child structures *)
+        ) else (
+          node.pruned_nodes <- Array.fold_left (fun acc child_opt -> 
+            match child_opt with Some c -> acc + c.pruned_nodes | None -> acc
+          ) 0 node.children   (* sum children's pruned counts *)
         )
       )
 ```
 
-### Walk Modification (Pruning Hotspot)
+### Key Design Decisions vs Original Spec
 
-In `walk`, after the loop that processes children, check if all are completed. If so, prune inline:
-
-```ocaml
-let rec walk (selector : 'a child_selector) (on_solution : 'a -> unit) (node : 'a node) : unit =
-  match node.node_view with
-  | Result _ -> ()  (* Already a leaf *)
-  | Fail -> ()       (* Already failed *)
-  | Fork choices ->
-      if node.isCompleted then ()  (* Already pruned, should not reach here *)
-      else (
-        let children = node.children in
-        let num_children = Array.length children in
-        let completed_count = ref 0 in
-        
-        for i = 0 to num_children - 1 do
-          match children.(i) with
-          | Some child ->
-              walk selector on_solution child;
-              if child.isCompleted then incr completed_count
-          | None -> ()  (* Unmaterialized, skip *)
-        done;
-        
-        (* Pruning hotspot: all children completed, prune this node *)
-        if !completed_count = num_children then (
-          node.isCompleted <- true;
-          (* Nodes freed = all descendants (materialized_nodes - self) *)
-          node.pruned_nodes <- node.materialized_nodes - 1;
-          node.children <- Pruned
-        )
-      )
-```
-
-### Critical Invariant: Pruned Node Traversal
-
-If `walk` ever reaches a node with `children = Pruned`, it's a bug (the selector should have skipped this completed node). Raise an exception:
-
-```ocaml
-| Pruned -> 
-    invalid_arg "Stochastic_estimator: attempted to traverse pruned node - this is a bug"
-```
+| Spec | Actual Implementation | Reason |
+|------|----------------------|--------|
+| `children : 'a node option array \| Pruned` (variant) | `children : 'a node option array`, `[||]` for pruned | OCaml mutual recursion constraints prevented `'a node` reference in a variant type |
+| Exception on pruned traversal | `if node.isCompleted then ()` guard in walk | Empty array is silently handled; no traversal needed, no exception required |
+| For-loop processing all children | Recursive walk, one child per sample | Kept existing recursive structure; selector picks one child at a time |
+| No mention of `pruned_nodes` propagation | Else-branch sums children's `pruned_nodes` | Bug fix: parents must track pruned descendants even when not yet completed |
+| "Recursive pruning" mentioned | Not applicable — setting children to `[||]` is permanent, nothing to recurse into | User confirmed recursive pruning was nonsense; pruned nodes are just gone |
 
 ### Important Considerations
 
 1. **Selector already avoids completed nodes**: The `undersampled_selector` checks `isCompleted` before selecting children. Since pruning only happens after `isCompleted = true`, the selector will never select through a pruned node.
 
-2. **Pruning during save**: Consider pruning before saving (Task 5) to reduce state file size. This is a natural pairing - prune, then save the smaller state.
+2. **`walk` guards at every level**: Both the root-level check in `sample` (`if est.root.isCompleted`) and the per-node guard in `walk` (`if node.isCompleted then ()`) prevent wasted traversal.
 
-3. **Thread safety**: If we add parallel sampling later, pruning must be synchronized. For now (single-threaded), this is not a concern.
+3. **No unpruning**: Pruned nodes are permanent. They represent fully-explored subtrees that should never be sampled again.
 
-4. **No unpruning**: Pruned nodes are permanent. They represent fully-explored subtrees that should never be sampled again. If a bug causes traversal of a pruned node, raise an exception rather than silently reconstructing.
+4. **`pruned_nodes` invariant**: At all times, `node.pruned_nodes` = sum of pruned descendants. When the node itself is pruned, it becomes `materialized_nodes - 1` (all descendants).
 
-## Files to Modify
+## Files Modified
 
-- `searchspace/stochastic_estimator.ml` - implementation (add `Pruned` variant, `pruned_nodes` field, prune logic in `walk`)
-- `searchspace/stochastic_estimator.mli` - interface update (add `Pruned` to children type, export `pruned_nodes`)
-
-## Files to Create
-
-- Tests inline in `stochastic_estimator.ml` using `%test_module` and `[%expect_test]`
+- `searchspace/stochastic_estimator.ml` — implementation (`pruned_nodes` field, pruning logic in `walk`, else-branch propagation)
+- Tests inline using `[%expect_test]`
