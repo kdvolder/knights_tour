@@ -13,7 +13,7 @@ The goal is to enhance the existing `stochastic_estimator.ml` module with:
 5. **Memory management** - prune fully-explored branches to reduce memory usage ✅
 6. **Adaptive selector selection** - monitor memory pressure, switch between broad/narrow exploration to enable pruning
 7. **Greedy completion selector** - pick child with least remaining work to drive branches to completion ✅
-8. **CLI integration** - command-line executable similar to solve_file.ml
+9. **CLI integration** - command-line executable similar to solve_file.ml
 
 ## Task Index
 
@@ -27,7 +27,7 @@ The goal is to enhance the existing `stochastic_estimator.ml` module with:
 | 6 | [Memory Management - Tree Pruning](done/06-memory-management-tree-pruning.md) | Done ✓ |
 | 7 | [Greedy Completion Selector](done/07-greedy-completion-selector.md) | Done ✓ |
 | 8 | [Adaptive Selector Selection](08-adaptive-selector-selection.md) | Not Started |
-| 7b | [CLI Integration](07-cli-integration.md) | Not Started |
+| 9 | [CLI Integration](09-cli-integration.md) | Not Started |
 
 ## Task Dependencies
 
@@ -41,7 +41,7 @@ Task 2 (Progress) ──▶ Task 5 (Auto-save)    Task 7 (Greedy Selector)
 Task 3 (Serialize) ──▶ Task 4 (Deserialize)    Task 8 (Adaptive Selector)
     │                       │                        │
     ▼                       ▼                        ▼
-Task 7b (CLI) - depends on all above
+Task 9 (CLI) - depends on all above
 ```
 
 - **Tasks 1-2**: Done — both modify the estimator API, implemented in parallel
@@ -49,7 +49,7 @@ Task 7b (CLI) - depends on all above
 - **Task 5**: Depends on Tasks 3+4 (needs serialization to save) — not started
 - **Task 6→7**: Pruning must come before greedy selector (selector needs pruning to be effective) — both done
 - **Task 8**: Depends on Task 6+7 — adaptive selection only makes sense if completed branches can be pruned and selector exists
-- **Task 7b**: Depends on all other tasks (integrates everything) — not started
+- **Task 9**: Depends on all other tasks (integrates everything) — not started
 
 ## Task Format
 
