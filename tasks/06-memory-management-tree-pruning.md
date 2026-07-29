@@ -223,8 +223,6 @@ let rec walk (selector : 'a child_selector) (on_solution : 'a -> unit) (node : '
       )
 ```
 
-Note: `prune_node` is recursive — when a parent completes and gets pruned, all its already-pruned children are counted but not re-pruned (they're already `Pruned`). The count includes the node itself plus all descendants that are in `Pruned` state.
-
 ### Walk Modification (Pruning Hotspot)
 
 In `walk`, after the loop that processes children, check if all are completed. If so, prune inline:

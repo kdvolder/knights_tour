@@ -301,6 +301,8 @@ let rec walk select_child on_solution (node : 'a node) : unit =
 				if node.isCompleted then (
 					node.pruned_nodes <- node.materialized_nodes - 1;
 					node.children <- [||]
+				) else (
+					node.pruned_nodes <- Array.fold_left (fun acc child_opt -> match child_opt with Some c -> acc + c.pruned_nodes | None -> acc) 0 node.children
 				)
 			)
 	)
