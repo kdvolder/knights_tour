@@ -262,6 +262,30 @@ let probabilistic_undersampled_selector (node : 'a node) : int =
         in pick 0 0.0
     )
 
+(** Select child with least remaining unmaterialized work.
+    Drives branches to completion faster, enabling pruning and memory reclamation. *)
+let greedy_completion_selector (node : 'a node) : int =
+  let n = Array.length node.children in
+  if n = 0 then 0
+  else
+    let best_idx = ref (-1) in
+    let best_remaining = ref Float.infinity in
+    for i = 0 to n - 1 do
+      match node.children.(i) with
+      | Some child ->
+          if not child.isCompleted then (
+            let remaining = child.nodes_estimate -. Float.of_int child.materialized_nodes in
+            if remaining < !best_remaining then (
+              best_idx := i;
+              best_remaining := remaining
+            )
+          )
+      | None -> ()  (* Unmaterialized — infinite remaining work, skip *)
+    done;
+    if !best_idx = -1 then (
+      (* All children are unmaterialized or completed — fall back to random *)
+      Random.int n
+    ) else !best_idx
 
 let rec walk select_child on_solution (node : 'a node) : unit =
 	match node.node_view with
@@ -1694,4 +1718,52 @@ let%expect_test "run_with_progress stops when complete" = begin
   [%expect{|
     Final materialized: 3
   |}]
+end
+
+(** Phase 1: Greedy Completion Selector Tests *)
+
+let%expect_test "greedy_completion_selector picks least remaining work" = begin
+  let num = of_list [1;2;3] in
+  let simple_space =
+     num |=> (fun x -> 
+       num |=> (fun y -> 
+        return (x + y)
+       )
+     ) 
+     |?> (fun sum -> sum>4) in 
+  let est = create ~selector:greedy_completion_selector simple_space in
+  Random.full_init [|42|];
+  (* Sample enough to materialize both children partially *)
+  ignore (sample 5 est);
+  Printf.printf "Root children: %d\n" (Array.length est.root.children);
+  for i = 0 to Array.length est.root.children - 1 do
+    match est.root.children.(i) with
+    | Some child ->
+        Printf.printf "Child %d: samples=%d est=%.0f mat=%d remaining=%.1f\n"
+          i child.samples child.nodes_estimate child.materialized_nodes
+            (child.nodes_estimate -. Float.of_int child.materialized_nodes)
+    | None -> Printf.printf "Child %d: not materialized\n" i
+  done;
+  [%expect{|
+    Root children: 3
+    Child 0: not materialized
+    Child 1: samples=2 est=4 mat=3 remaining=1.0
+    Child 2: not materialized
+    |}]
+end
+
+let%expect_test "greedy_completion_selector falls back to random when all None" = begin
+  let num = of_list [1;2] in
+  let simple_space =
+     num |=> (fun x -> 
+       num |=> (fun y -> 
+        return (x + y)
+       )
+     ) in
+  let est = create ~selector:greedy_completion_selector simple_space in
+  (* No samples yet — all children are None *)
+  let idx1 = greedy_completion_selector est.root in
+  let idx2 = greedy_completion_selector est.root in
+  Printf.printf "First=%d Second=%d\n" idx1 idx2;
+  [%expect{| First=1 Second=0 |}]
 end

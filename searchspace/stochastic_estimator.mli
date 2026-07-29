@@ -30,6 +30,10 @@ val probabilistic_undersampled_selector : 'a child_selector
 (** Similar to [undersampled_selector] but uses a probabilistic approach to avoid
     over-focusing on the least-sampled children. *)
 
+val greedy_completion_selector : 'a child_selector
+(** Picks the child with the least remaining unmaterialized work.
+    Drives branches to completion faster, enabling pruning and memory reclamation. *)
+
 type estimates = {
     nodes : float;
     (** The estimated number of nodes in the search space. *)
