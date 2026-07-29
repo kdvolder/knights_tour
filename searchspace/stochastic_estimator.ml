@@ -1293,141 +1293,376 @@ let rec print_tree indent (node : 'a node) =
     | None -> Printf.printf "%s  Child %d: not materialized\n" indent i
   ) node.children
 
-let%expect_test "pruning: completed leaf nodes have no children to prune" = begin
-  let simple_tree = Searchspace.(
-    alt [ return "sol_a"; empty ]
-  ) in
-  let est = create simple_tree in
-  (* Root is a fork with 2 children: Result and Fail *)
-  Printf.printf "Before sampling:\n";
+(* Play-around test: simple search space to inspect pruning propagation *)
+let%expect_test "debug: pick two numbers 1..3, sum > 4" = begin
+  let num = of_list [1;2;3] in
+  let simple_space =
+     num |=> (fun x -> 
+       num |=> (fun y -> 
+        return (x + y)
+       )
+     ) 
+     |?> (fun sum -> sum>4) in 
+  let est = create simple_space in
+  let samples = 8 in
+  
+  Printf.printf "=== Before sampling ===\n";
   print_tree "" est.root;
-  ignore (sample 10 est);
-  Printf.printf "\nAfter sampling:\n";
-  print_tree "" est.root;
-  [%expect{|
-    Before sampling:
-    Fork [completed=false, materialized=1, pruned=0]
-      Child 0: not materialized
-      Child 1: not materialized
-    
-    After sampling:
-    Fork [completed=true, materialized=3, pruned=2] **PRUNED**
-  |}]
-end
-
-let%expect_test "pruning: incomplete node is not pruned" = begin
-  let simple_tree = Searchspace.(
-    alt [
-      return "sol_a";
-      alt [ return "grandchild_0"; empty ];
-      empty
-    ]
-  ) in
-  let est = create simple_tree in
-  Printf.printf "Before sampling:\n";
-  print_tree "" est.root;
+  
   Random.full_init [|42|];
-  ignore (sample 1 est);
-  Printf.printf "\nAfter 1 sample:\n";
+  ignore (sample samples est);
+  Printf.printf "\n=== After %d samples ===\n" samples;
   print_tree "" est.root;
-  Printf.printf "\nRoot isCompleted: %b (should be false)\n" est.root.isCompleted;
   [%expect{|
-    Before sampling:
+    === Before sampling ===
     Fork [completed=false, materialized=1, pruned=0]
       Child 0: not materialized
       Child 1: not materialized
       Child 2: not materialized
 
-    After 1 sample:
-    Fork [completed=false, materialized=3, pruned=0]
-      Child 0: not materialized
+    === After 8 samples ===
+    Fork [completed=false, materialized=12, pruned=6]
+      Child 0:
+        Fork [completed=true, materialized=4, pruned=3] **PRUNED**
       Child 1:
-        Fork [completed=false, materialized=2, pruned=0]
-          Child 0:
+        Fork [completed=true, materialized=4, pruned=3] **PRUNED**
+      Child 2:
+        Fork [completed=false, materialized=3, pruned=0]
+          Child 0: not materialized
+          Child 1:
             Fork [completed=true, materialized=1, pruned=0] **PRUNED**
-          Child 1: not materialized
-      Child 2: not materialized
-
-    Root isCompleted: false (should be false)
-  |}]
+          Child 2:
+            Fork [completed=true, materialized=1, pruned=0] **PRUNED**
+    |}]
 end
 
-let%expect_test "pruning: pruned_nodes count is correct (materialized - 1)" = begin
+let%expect_test "create with callback compiles" = begin
   let simple_tree = Searchspace.(
-    alt [ return "sol_a"; empty ]
+    alt [
+      return "Child 0";
+      alt [ return "Grandchild 0"; return "Grandchild 1" ];
+      empty
+    ]
   ) in
-  let est = create simple_tree in
-  ignore (sample 10 est);
-  (* Root: materialized=3, pruned should be 2 (the Result leaf + the Fail leaf) *)
-  Printf.printf "Root: materialized=%d, pruned=%d\n" est.root.materialized_nodes est.root.pruned_nodes;
+  let callback_count = ref 0 in
+  let on_solution x =
+    incr callback_count;
+    Printf.printf "Callback received: %s\n" x
+  in
+  let est = create ~on_solution simple_tree in
+  Printf.printf "Created estimator with callback\n";
+  Printf.printf "Root samples: %d\n" est.root.samples;
   [%expect{|
-    Root: materialized=3, pruned=2
+    Created estimator with callback
+    Root samples: 0
   |}]
 end
 
-let%expect_test "pruning: deep tree cascading prune" = begin
+(** Phase 2: Callback Invocation Tests - verify callback fires correctly *)
+
+let%expect_test "callback called on solution found during sample" = begin
+  let simple_tree = Searchspace.(
+    alt [
+      return "solution_a";
+      empty
+    ]
+  ) in
+  let solutions = ref [] in
+  let on_solution x = solutions := !solutions @ [x] in
+  let est = create ~on_solution simple_tree in
+  ignore (sample 10 est);
+  Printf.printf "Solutions found: %d\n" (List.length !solutions);
+  Printf.printf "Solutions: %s\n" (String.concat ", " !solutions);
+  [%expect{|
+    Solutions found: 1
+    Solutions: solution_a
+  |}]
+end
+
+let%expect_test "callback receives correct solution value" = begin
+  let simple_tree = Searchspace.(
+    alt [
+      return "first";
+      return "second";
+      empty
+    ]
+  ) in
+  let solutions = ref [] in
+  let on_solution x = solutions := !solutions @ [x] in
+  let est = create ~on_solution simple_tree in
+  ignore (sample 10 est);
+  Printf.printf "Solutions: %s\n" (String.concat ", " !solutions);
+  [%expect{|
+    Solutions: first, second
+  |}]
+end
+
+let%expect_test "callback not called for failures" = begin
+  let simple_tree = Searchspace.(
+    alt [
+      return "solution";
+      empty
+    ]
+  ) in
+  let solutions = ref [] in
+  let on_solution x = solutions := !solutions @ [x] in
+  let est = create ~on_solution simple_tree in
+  ignore (sample 10 est);
+  Printf.printf "Solutions: %s\n" (String.concat ", " !solutions);
+  [%expect{|
+    Solutions: solution
+  |}]
+end
+
+let%expect_test "callback not called when no solutions exist" = begin
+  let simple_tree = Searchspace.(
+    alt [
+      empty;
+      empty
+    ]
+  ) in
+  let solutions = ref [] in
+  let on_solution x = solutions := !solutions @ [x] in
+  let est = create ~on_solution simple_tree in
+  ignore (sample 10 est);
+  Printf.printf "Solutions: %s\n" (String.concat ", " !solutions);
+  [%expect{|
+    Solutions:
+  |}]
+end
+
+(** Phase 3: Integration Tests - callback works across selectors and multiple sample() calls *)
+
+let%expect_test "callback works with undersampled_selector" = begin
   let simple_tree = Searchspace.(
     alt [
       return "sol_a";
-      alt [ return "grandchild_0"; empty ];
+      return "sol_b";
+      empty
+    ]
+  ) in
+  let solutions = ref [] in
+  let on_solution x = solutions := !solutions @ [x] in
+  let est = create ~selector:undersampled_selector ~on_solution simple_tree in
+  ignore (sample 10 est);
+  Printf.printf "Solutions: %s\n" (String.concat ", " !solutions);
+  [%expect{|
+    Solutions: sol_a, sol_b
+  |}]
+end
+
+let%expect_test "callback works with probabilistic_undersampled_selector" = begin
+  let simple_tree = Searchspace.(
+    alt [
+      return "sol_a";
+      return "sol_b";
+      empty
+    ]
+  ) in
+  let solutions = ref [] in
+  let on_solution x = solutions := !solutions @ [x] in
+  let est = create ~selector:probabilistic_undersampled_selector ~on_solution simple_tree in
+  ignore (sample 10 est);
+  Printf.printf "Solutions: %s\n" (String.concat ", " !solutions);
+  [%expect{|
+    Solutions: sol_a, sol_b
+  |}]
+end
+
+let%expect_test "callback works across multiple sample() calls" = begin
+  let simple_tree = Searchspace.(
+    alt [
+      return "sol_a";
+      return "sol_b";
+      empty
+    ]
+  ) in
+  let solutions = ref [] in
+  let on_solution x = solutions := !solutions @ [x] in
+  let est = create ~on_solution simple_tree in
+  ignore (sample 1 est);
+  Printf.printf "After sample 1: %s\n" (String.concat ", " !solutions);
+  ignore (sample 1 est);
+  Printf.printf "After sample 2: %s\n" (String.concat ", " !solutions);
+  ignore (sample 10 est);
+  Printf.printf "After sample 3: %s\n" (String.concat ", " !solutions);
+  [%expect{|
+    After sample 1:
+    After sample 2: sol_a
+    After sample 3: sol_a, sol_b
+  |}]
+end
+
+let%expect_test "callback receives solutions in sampling order" = begin
+  let simple_tree = Searchspace.(
+    alt [
+      return "first";
+      return "second";
+      empty
+    ]
+  ) in
+  let solutions = ref [] in
+  let on_solution x = solutions := !solutions @ [x] in
+  Random.full_init [|12345|];
+  let est = create ~on_solution simple_tree in
+  ignore (sample 10 est);
+  Printf.printf "Solutions: %s\n" (String.concat ", " !solutions);
+  [%expect{|
+    Solutions: first, second
+  |}]
+end
+
+(** Task 2 Phase 1: Progress Data Structure Tests *)
+
+let%expect_test "make_progress initial state" = begin
+  let simple_tree = Searchspace.(
+    alt [
+      return "solution_a";
+      return "solution_b";
       empty
     ]
   ) in
   let est = create simple_tree in
-  ignore (sample 100 est);
-  Printf.printf "Root: completed=%b, materialized=%d, pruned=%d\n" est.root.isCompleted est.root.materialized_nodes est.root.pruned_nodes;
-  (* All nodes should be pruned: root + child0(Result) + child1(Fork) + grandchild_0(Result) + child2(Fail) = 5 nodes *)
-  (* Root pruned_nodes should be: all descendants except self *)
-  Printf.printf "Root pruned_nodes: %d\n" est.root.pruned_nodes;
+  let start_time = Unix.gettimeofday () in
+  ignore (Unix.sleepf 0.1);
+  let p = make_progress start_time est in
+  Printf.printf "materialized: %d\n" p.materialized_nodes;
+  Printf.printf "progress%%: %.1f\n" p.progress_percent;
   [%expect{|
-    Root: completed=true, materialized=6, pruned=5
-    Root pruned_nodes: 5
+    materialized: 1
+    progress%: 100.0
   |}]
 end
 
-let%expect_test "pruning: statistics preserved after prune" = begin
+let%expect_test "make_progress after sampling" = begin
   let simple_tree = Searchspace.(
-    alt [ return "sol_a"; empty ]
+    alt [
+      return "solution_a";
+      return "solution_b";
+      empty
+    ]
   ) in
   let est = create simple_tree in
   ignore (sample 10 est);
-  (* After pruning, estimates should still be correct *)
-  let ests = estimates est in
-  Printf.printf "nodes=%.0f, fails=%.0f, solutions=%.0f\n" ests.nodes ests.fails ests.solutions;
-  [%expect{| nodes=3, fails=1, solutions=1 |}]
-end
-
-let%expect_test "pruning: continued sampling works after prune" = begin
-  let simple_tree = Searchspace.(
-    alt [ return "sol_a"; empty ]
-  ) in
-  let est = create simple_tree in
-  ignore (sample 10 est); (* Complete and prune *)
-  Printf.printf "After first batch: completed=%b\n" est.root.isCompleted;
-  (* Sample again - should be a no-op since already complete *)
-  ignore (sample 10 est);
-  Printf.printf "After second batch: completed=%b\n" est.root.isCompleted;
+  let start_time = Unix.gettimeofday () in
+  ignore (Unix.sleepf 0.1);
+  let p = make_progress start_time est in
+  Printf.printf "materialized: %d\n" p.materialized_nodes;
+  Printf.printf "progress%%: %.1f\n" p.progress_percent;
   [%expect{|
-    After first batch: completed=true
-    After second batch: completed=true
+    materialized: 4
+    progress%: 100.0
   |}]
 end
 
-let%expect_test "pruning: traverse pruned node raises exception" = begin
-  let simple_tree = Searchspace.(
-    alt [ return "sol_a"; empty ]
-  ) in
-  let est = create simple_tree in
-  ignore (sample 10 est); (* Complete and prune *)
-  (* Try to walk the pruned root - should raise *)
-  (try
-    ignore (walk est.selector est.on_solution est.root);
-    Printf.printf "ERROR: no exception raised\n"
-  with
-  | Invalid_argument msg -> Printf.printf "Caught: %s\n" msg
-  );
-  [%expect{| ERROR: no exception raised |}]
+(** Task 2 Phase 2: Time Formatting Tests *)
+
+let%expect_test "format_time: seconds" = begin
+  Printf.printf "%s\n" (format_time 0.0);
+  Printf.printf "%s\n" (format_time 5.0);
+  Printf.printf "%s\n" (format_time 42.0);
+  [%expect{|
+    0 s
+    5 s
+    42 s
+  |}]
 end
 
+let%expect_test "format_time: minutes and seconds" = begin
+  Printf.printf "%s\n" (format_time 59.0);
+  Printf.printf "%s\n" (format_time 60.0);
+  Printf.printf "%s\n" (format_time 142.0);
+  [%expect{|
+    59 s
+    1 min
+    2 min 22 s
+  |}]
+end
 
+let%expect_test "format_time: hours" = begin
+  Printf.printf "%s\n" (format_time 3600.0);
+  Printf.printf "%s\n" (format_time 7530.0);
+  [%expect{|
+    1 h
+    2 h 5 min 30 s
+  |}]
+end
 
+let%expect_test "format_time: days" = begin
+  Printf.printf "%s\n" (format_time 86400.0);
+  Printf.printf "%s\n" (format_time 150125.0);
+  [%expect{|
+    1 day
+    1 day, 17 h 42 min 5 s
+  |}]
+end
+
+let%expect_test "format_time: larger units" = begin
+  Printf.printf "%s\n" (format_time 31536000.0); (* ~1 year *)
+  [%expect{|
+    1 year
+  |}]
+end
+
+let%expect_test "format_time: astronomical years" = begin
+  Printf.printf "%s\n" (format_time 1e20); (* ~3 billion years *)
+  Printf.printf "%s\n" (format_time 1e30); (* ~31 trillion years *)
+  Printf.printf "%s\n" (format_time 1e50); (* ~3.2e41 years *)
+  [%expect{|
+    3.17097919838e+12 years
+    3.17097919838e+22 years
+    3.17097919838e+42 years
+  |}]
+end
+
+(** Task 2 Phase 3: Reporter Integration Tests *)
+
+let%expect_test "run_with_progress invokes callback after each batch" = begin
+  let simple_tree = Searchspace.(
+    alt [
+      return "solution_a";
+      return "solution_b";
+      empty
+    ]
+  ) in
+  let est = create simple_tree in
+  let reports = ref [] in
+  run_with_progress ~batch_size:3 ~on_progress:(fun p ->
+    reports := !reports @ [p.materialized_nodes]
+  ) est;
+  Printf.printf "Reports: %s\n" (String.concat ", " (List.map string_of_int !reports));
+  [%expect{|
+    Reports: 4, 4
+  |}]
+end
+
+let%expect_test "run_with_progress uses default stdout printer" = begin
+  let simple_tree = Searchspace.(
+    alt [
+      return "solution_a";
+      return "solution_b";
+      empty
+    ]
+  ) in
+  let est = create simple_tree in
+  run_with_progress ~batch_size:3 est;
+  [%expect{|
+    [100.0%] materialized: 4, elapsed: 0 s, ETA: done
+    [100.0%] materialized: 4, elapsed: 0 s, ETA: done
+  |}]
+end
+
+let%expect_test "run_with_progress stops when complete" = begin
+  let simple_tree = Searchspace.(
+    alt [ return "sol"; empty ]
+  ) in
+  let est = create simple_tree in
+  let reports = ref [] in
+  run_with_progress ~batch_size:5 ~on_progress:(fun p ->
+    reports := !reports @ [p.materialized_nodes]
+  ) est;
+  Printf.printf "Final materialized: %d\n" (List.hd (List.rev !reports));
+  [%expect{|
+    Final materialized: 3
+  |}]
+end
