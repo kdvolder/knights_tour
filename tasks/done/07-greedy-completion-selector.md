@@ -1,4 +1,7 @@
-# Task 7: Greedy Completion Selector
+# Task 7: Greedy Completion Selector — ✅ DONE
+
+> **Status**: Complete (committed `3ad844b`)
+> **Date**: 2025-07-28
 
 ## Goal
 
