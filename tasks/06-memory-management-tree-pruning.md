@@ -161,7 +161,7 @@ let rec walk (selector : 'a child_selector) (on_solution : 'a -> unit) (node : '
 
 | Spec | Actual Implementation | Reason |
 |------|----------------------|--------|
-| `children : 'a node option array \| Pruned` (variant) | `children : 'a node option array`, `[||]` for pruned | OCaml mutual recursion constraints prevented `'a node` reference in a variant type |
+| `children : 'a node option array \| Pruned` (variant) | `children : 'a node option array`, `[||]` for pruned | AI failed to declare mutually recursive types with correct OCaml syntax and gave up instead of solving it — not a language limitation |
 | Exception on pruned traversal | `if node.isCompleted then ()` guard in walk | Empty array is silently handled; no traversal needed, no exception required |
 | For-loop processing all children | Recursive walk, one child per sample | Kept existing recursive structure; selector picks one child at a time |
 | No mention of `pruned_nodes` propagation | Else-branch sums children's `pruned_nodes` | Bug fix: parents must track pruned descendants even when not yet completed |
