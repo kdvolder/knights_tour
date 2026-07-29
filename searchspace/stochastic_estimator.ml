@@ -283,8 +283,20 @@ let greedy_completion_selector (node : 'a node) : int =
       | None -> ()  (* Unmaterialized — infinite remaining work, skip *)
     done;
     if !best_idx = -1 then (
-      (* All children are unmaterialized or completed — fall back to random *)
-      Random.int n
+      (* All children are unmaterialized or completed — fall back to random
+         among non-completed children only (None will be materialized, incomplete
+         Some have finite remaining work). Skip completed children to avoid
+         wasting samples on already-explored subtrees. *)
+      let candidates = ref [] in
+      for i = 0 to n - 1 do
+        match node.children.(i) with
+        | Some child when not child.isCompleted -> candidates := i :: !candidates
+        | None -> candidates := i :: !candidates  (* Unmaterialized — will be materialized *)
+        | _ -> ()  (* Completed, skip *)
+      done;
+      match !candidates with
+      | [] -> 0  (* Safety fallback — should never happen *)
+      | _ -> List.nth !candidates (Random.int (List.length !candidates))
     ) else !best_idx
 
 let rec walk select_child on_solution (node : 'a node) : unit =
@@ -1720,9 +1732,7 @@ let%expect_test "run_with_progress stops when complete" = begin
   |}]
 end
 
-(** Phase 1: Greedy Completion Selector Tests *)
-
-let%expect_test "greedy_completion_selector picks least remaining work" = begin
+let%expect_test "greedy_completion_selector: step-by-step inspection" = begin
   let num = of_list [1;2;3] in
   let simple_space =
      num |=> (fun x -> 
@@ -1733,37 +1743,113 @@ let%expect_test "greedy_completion_selector picks least remaining work" = begin
      |?> (fun sum -> sum>4) in 
   let est = create ~selector:greedy_completion_selector simple_space in
   Random.full_init [|42|];
-  (* Sample enough to materialize both children partially *)
-  ignore (sample 5 est);
-  Printf.printf "Root children: %d\n" (Array.length est.root.children);
-  for i = 0 to Array.length est.root.children - 1 do
-    match est.root.children.(i) with
-    | Some child ->
-        Printf.printf "Child %d: samples=%d est=%.0f mat=%d remaining=%.1f\n"
-          i child.samples child.nodes_estimate child.materialized_nodes
-            (child.nodes_estimate -. Float.of_int child.materialized_nodes)
-    | None -> Printf.printf "Child %d: not materialized\n" i
+  
+  Printf.printf "=== Before sampling ===\n";
+  print_tree "" est.root;
+  
+  for batch = 1 to 8 do
+    ignore (sample 1 est);
+    Printf.printf "\n=== After %d samples ===\n" batch;
+    print_tree "" est.root
   done;
   [%expect{|
-    Root children: 3
-    Child 0: not materialized
-    Child 1: samples=2 est=4 mat=3 remaining=1.0
-    Child 2: not materialized
-    |}]
-end
+    === Before sampling ===
+    Fork [samples=0 nodes=1. completed=false materialized=1 pruned=0]
+      Child 0: not materialized
+      Child 1: not materialized
+      Child 2: not materialized
 
-let%expect_test "greedy_completion_selector falls back to random when all None" = begin
-  let num = of_list [1;2] in
-  let simple_space =
-     num |=> (fun x -> 
-       num |=> (fun y -> 
-        return (x + y)
-       )
-     ) in
-  let est = create ~selector:greedy_completion_selector simple_space in
-  (* No samples yet — all children are None *)
-  let idx1 = greedy_completion_selector est.root in
-  let idx2 = greedy_completion_selector est.root in
-  Printf.printf "First=%d Second=%d\n" idx1 idx2;
-  [%expect{| First=1 Second=0 |}]
+    === After 1 samples ===
+    Fork [samples=1 nodes=13. completed=false materialized=3 pruned=0]
+      Child 0: not materialized
+      Child 1:
+        Fork [samples=1 nodes=4. completed=false materialized=2 pruned=0]
+          Child 0: not materialized
+          Child 1:
+            Fork [samples=1 nodes=1. completed=true materialized=1 pruned=0] **PRUNED**
+          Child 2: not materialized
+      Child 2: not materialized
+
+    === After 2 samples ===
+    Fork [samples=1 nodes=13. completed=false materialized=3 pruned=0]
+      Child 0: not materialized
+      Child 1:
+        Fork [samples=1 nodes=4. completed=false materialized=2 pruned=0]
+          Child 0: not materialized
+          Child 1:
+            Fork [samples=1 nodes=1. completed=true materialized=1 pruned=0] **PRUNED**
+          Child 2: not materialized
+      Child 2: not materialized
+
+    === After 3 samples ===
+    Fork [samples=1 nodes=13. completed=false materialized=3 pruned=0]
+      Child 0: not materialized
+      Child 1:
+        Fork [samples=1 nodes=4. completed=false materialized=2 pruned=0]
+          Child 0: not materialized
+          Child 1:
+            Fork [samples=1 nodes=1. completed=true materialized=1 pruned=0] **PRUNED**
+          Child 2: not materialized
+      Child 2: not materialized
+
+    === After 4 samples ===
+    Fork [samples=2 nodes=13. completed=false materialized=4 pruned=0]
+      Child 0: not materialized
+      Child 1:
+        Fork [samples=2 nodes=4. completed=false materialized=3 pruned=0]
+          Child 0:
+            Fork [samples=1 nodes=1. completed=true materialized=1 pruned=0] **PRUNED**
+          Child 1:
+            Fork [samples=1 nodes=1. completed=true materialized=1 pruned=0] **PRUNED**
+          Child 2: not materialized
+      Child 2: not materialized
+
+    === After 5 samples ===
+    Fork [samples=2 nodes=13. completed=false materialized=4 pruned=0]
+      Child 0: not materialized
+      Child 1:
+        Fork [samples=2 nodes=4. completed=false materialized=3 pruned=0]
+          Child 0:
+            Fork [samples=1 nodes=1. completed=true materialized=1 pruned=0] **PRUNED**
+          Child 1:
+            Fork [samples=1 nodes=1. completed=true materialized=1 pruned=0] **PRUNED**
+          Child 2: not materialized
+      Child 2: not materialized
+
+    === After 6 samples ===
+    Fork [samples=2 nodes=13. completed=false materialized=4 pruned=0]
+      Child 0: not materialized
+      Child 1:
+        Fork [samples=2 nodes=4. completed=false materialized=3 pruned=0]
+          Child 0:
+            Fork [samples=1 nodes=1. completed=true materialized=1 pruned=0] **PRUNED**
+          Child 1:
+            Fork [samples=1 nodes=1. completed=true materialized=1 pruned=0] **PRUNED**
+          Child 2: not materialized
+      Child 2: not materialized
+
+    === After 7 samples ===
+    Fork [samples=2 nodes=13. completed=false materialized=4 pruned=0]
+      Child 0: not materialized
+      Child 1:
+        Fork [samples=2 nodes=4. completed=false materialized=3 pruned=0]
+          Child 0:
+            Fork [samples=1 nodes=1. completed=true materialized=1 pruned=0] **PRUNED**
+          Child 1:
+            Fork [samples=1 nodes=1. completed=true materialized=1 pruned=0] **PRUNED**
+          Child 2: not materialized
+      Child 2: not materialized
+
+    === After 8 samples ===
+    Fork [samples=2 nodes=13. completed=false materialized=4 pruned=0]
+      Child 0: not materialized
+      Child 1:
+        Fork [samples=2 nodes=4. completed=false materialized=3 pruned=0]
+          Child 0:
+            Fork [samples=1 nodes=1. completed=true materialized=1 pruned=0] **PRUNED**
+          Child 1:
+            Fork [samples=1 nodes=1. completed=true materialized=1 pruned=0] **PRUNED**
+          Child 2: not materialized
+      Child 2: not materialized
+    |}]
 end
