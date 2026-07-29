@@ -1285,7 +1285,11 @@ end
 (* Helper to inspect node children variant and pruned_nodes count *)
 let rec print_tree indent (node : 'a node) =
   let pruned_marker = if Array.length node.children = 0 && node.isCompleted then " **PRUNED**" else "" in
-  let output = indent ^ "Fork [completed=" ^ string_of_bool node.isCompleted ^ ", materialized=" ^ string_of_int node.materialized_nodes ^ ", pruned=" ^ string_of_int node.pruned_nodes ^ "]" ^ pruned_marker in
+  let output = indent ^ "Fork [samples=" ^ string_of_int node.samples 
+                          ^ " nodes=" ^ string_of_float node.nodes_estimate
+                          ^ " completed=" ^ string_of_bool node.isCompleted 
+                          ^ " materialized=" ^ string_of_int node.materialized_nodes 
+                          ^ " pruned=" ^ string_of_int node.pruned_nodes ^ "]" ^ pruned_marker in
   Printf.printf "%s\n" output;
   Array.iteri (fun i child_opt ->
     match child_opt with
@@ -1315,24 +1319,49 @@ let%expect_test "debug: pick two numbers 1..3, sum > 4" = begin
   print_tree "" est.root;
   [%expect{|
     === Before sampling ===
-    Fork [completed=false, materialized=1, pruned=0]
+    Fork [samples=0 nodes=1. completed=false materialized=1 pruned=0]
       Child 0: not materialized
       Child 1: not materialized
       Child 2: not materialized
 
     === After 8 samples ===
-    Fork [completed=false, materialized=12, pruned=6]
+    Fork [samples=8 nodes=13. completed=false materialized=12 pruned=6]
       Child 0:
-        Fork [completed=true, materialized=4, pruned=3] **PRUNED**
+        Fork [samples=3 nodes=4. completed=true materialized=4 pruned=3] **PRUNED**
       Child 1:
-        Fork [completed=true, materialized=4, pruned=3] **PRUNED**
+        Fork [samples=3 nodes=4. completed=true materialized=4 pruned=3] **PRUNED**
       Child 2:
-        Fork [completed=false, materialized=3, pruned=0]
+        Fork [samples=2 nodes=4. completed=false materialized=3 pruned=0]
           Child 0: not materialized
           Child 1:
-            Fork [completed=true, materialized=1, pruned=0] **PRUNED**
+            Fork [samples=1 nodes=1. completed=true materialized=1 pruned=0] **PRUNED**
           Child 2:
-            Fork [completed=true, materialized=1, pruned=0] **PRUNED**
+            Fork [samples=1 nodes=1. completed=true materialized=1 pruned=0] **PRUNED**
+    |}]
+end
+
+let%expect_test "oversampling is fine" = begin 
+  let num = of_list [1;2;3] in
+  let simple_space =
+     num |=> (fun x -> 
+       num |=> (fun y -> 
+        return (x + y)
+       )
+     ) 
+     |?> (fun sum -> sum>4) in 
+  let solutions = ref [] in
+  let on_solution x = solutions:= x :: !solutions in
+  let est = create ~on_solution simple_space in
+  sample 100 est |> ignore;
+  Printf.printf "=== solutions ===\n";
+  List.iter (Printf.printf "%d; ") !solutions;
+  Printf.printf "\n===== tree ====\n";
+  print_tree "" est.root;
+  [%expect{|
+    === solutions ===
+    6; 5; 5;
+    ===== tree ====
+    Fork [samples=9 nodes=13. completed=true materialized=13 pruned=12] **PRUNED**
     |}]
 end
 
