@@ -119,6 +119,7 @@ type progress = {
   fails_estimate : float;
   solutions_estimate : float;
   materialized_nodes : int;
+  pruned_nodes : int;
   progress_percent : float;
   estimated_remaining_seconds : float;
 }

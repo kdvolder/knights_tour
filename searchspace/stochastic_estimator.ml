@@ -606,6 +606,7 @@ type progress = {
   fails_estimate : float;
   solutions_estimate : float;
   materialized_nodes : int;
+  pruned_nodes : int;
   progress_percent : float;
   estimated_remaining_seconds : float;
 }
@@ -633,6 +634,7 @@ let make_progress (start_time : float) (est : 'a t) : progress =
     fails_estimate = ests.fails;
     solutions_estimate = ests.solutions;
     materialized_nodes = ests.materialized_nodes;
+    pruned_nodes = est.root.pruned_nodes;
     progress_percent;
     estimated_remaining_seconds = estimated_remaining;
   }
