@@ -179,6 +179,7 @@ type 'a node = {
    mutable fail_estimate : float;                  (* Final estimate for failures in this subtree *)
 	 mutable solution_estimate : float;              (* Final estimate for solutions in this subtree *)
 	 mutable materialized_nodes : int;               (* Number of materialized nodes in this subtree *)
+	 mutable pruned_nodes : int;                     (* Number of nodes freed when this node was pruned *)
 }
 
 let child_average (children : 'a node option array) (f : 'a node -> float) :
@@ -210,6 +211,7 @@ let create_node (space : 'a Searchspace.t) : 'a node =
 			fail_estimate;
 			solution_estimate;
 			materialized_nodes;
+			pruned_nodes = 0;
 		}
 
 type 'a child_selector = 'a node -> int
@@ -295,6 +297,11 @@ let rec walk select_child on_solution (node : 'a node) : unit =
 				node.isCompleted <-
 					Array.length node.children > 0 &&
 					Array.for_all (function | Some c -> c.isCompleted | None -> false) node.children;
+				(* Pruning hotspot: if all children completed, prune this node *)
+				if node.isCompleted then (
+					node.pruned_nodes <- node.materialized_nodes - 1;
+					node.children <- [||]
+				)
 			)
 	)
 
@@ -1269,6 +1276,155 @@ let%expect_test "run_with_progress stops when complete" = begin
   [%expect{|
     Final materialized: 3
   |}]
+end
+
+(** Task 6: Tree Pruning Tests *)
+
+(* Helper to inspect node children variant and pruned_nodes count *)
+let rec print_tree indent (node : 'a node) =
+  let pruned_marker = if Array.length node.children = 0 && node.isCompleted then " **PRUNED**" else "" in
+  let output = indent ^ "Fork [completed=" ^ string_of_bool node.isCompleted ^ ", materialized=" ^ string_of_int node.materialized_nodes ^ ", pruned=" ^ string_of_int node.pruned_nodes ^ "]" ^ pruned_marker in
+  Printf.printf "%s\n" output;
+  Array.iteri (fun i child_opt ->
+    match child_opt with
+    | Some child -> Printf.printf "%s  Child %d:\n" indent i; print_tree (indent ^ "    ") child
+    | None -> Printf.printf "%s  Child %d: not materialized\n" indent i
+  ) node.children
+
+let%expect_test "pruning: completed leaf nodes have no children to prune" = begin
+  let simple_tree = Searchspace.(
+    alt [ return "sol_a"; empty ]
+  ) in
+  let est = create simple_tree in
+  (* Root is a fork with 2 children: Result and Fail *)
+  Printf.printf "Before sampling:\n";
+  print_tree "" est.root;
+  ignore (sample 10 est);
+  Printf.printf "\nAfter sampling:\n";
+  print_tree "" est.root;
+  [%expect{|
+    Before sampling:
+    Fork [completed=false, materialized=1, pruned=0]
+      Child 0: not materialized
+      Child 1: not materialized
+    
+    After sampling:
+    Fork [completed=true, materialized=3, pruned=2] **PRUNED**
+  |}]
+end
+
+let%expect_test "pruning: incomplete node is not pruned" = begin
+  let simple_tree = Searchspace.(
+    alt [
+      return "sol_a";
+      alt [ return "grandchild_0"; empty ];
+      empty
+    ]
+  ) in
+  let est = create simple_tree in
+  Printf.printf "Before sampling:\n";
+  print_tree "" est.root;
+  Random.full_init [|42|];
+  ignore (sample 1 est);
+  Printf.printf "\nAfter 1 sample:\n";
+  print_tree "" est.root;
+  Printf.printf "\nRoot isCompleted: %b (should be false)\n" est.root.isCompleted;
+  [%expect{|
+    Before sampling:
+    Fork [completed=false, materialized=1, pruned=0]
+      Child 0: not materialized
+      Child 1: not materialized
+      Child 2: not materialized
+
+    After 1 sample:
+    Fork [completed=false, materialized=3, pruned=0]
+      Child 0: not materialized
+      Child 1:
+        Fork [completed=false, materialized=2, pruned=0]
+          Child 0:
+            Fork [completed=true, materialized=1, pruned=0] **PRUNED**
+          Child 1: not materialized
+      Child 2: not materialized
+
+    Root isCompleted: false (should be false)
+  |}]
+end
+
+let%expect_test "pruning: pruned_nodes count is correct (materialized - 1)" = begin
+  let simple_tree = Searchspace.(
+    alt [ return "sol_a"; empty ]
+  ) in
+  let est = create simple_tree in
+  ignore (sample 10 est);
+  (* Root: materialized=3, pruned should be 2 (the Result leaf + the Fail leaf) *)
+  Printf.printf "Root: materialized=%d, pruned=%d\n" est.root.materialized_nodes est.root.pruned_nodes;
+  [%expect{|
+    Root: materialized=3, pruned=2
+  |}]
+end
+
+let%expect_test "pruning: deep tree cascading prune" = begin
+  let simple_tree = Searchspace.(
+    alt [
+      return "sol_a";
+      alt [ return "grandchild_0"; empty ];
+      empty
+    ]
+  ) in
+  let est = create simple_tree in
+  ignore (sample 100 est);
+  Printf.printf "Root: completed=%b, materialized=%d, pruned=%d\n" est.root.isCompleted est.root.materialized_nodes est.root.pruned_nodes;
+  (* All nodes should be pruned: root + child0(Result) + child1(Fork) + grandchild_0(Result) + child2(Fail) = 5 nodes *)
+  (* Root pruned_nodes should be: all descendants except self *)
+  Printf.printf "Root pruned_nodes: %d\n" est.root.pruned_nodes;
+  [%expect{|
+    Root: completed=true, materialized=6, pruned=5
+    Root pruned_nodes: 5
+  |}]
+end
+
+let%expect_test "pruning: statistics preserved after prune" = begin
+  let simple_tree = Searchspace.(
+    alt [ return "sol_a"; empty ]
+  ) in
+  let est = create simple_tree in
+  ignore (sample 10 est);
+  (* After pruning, estimates should still be correct *)
+  let ests = estimates est in
+  Printf.printf "nodes=%.0f, fails=%.0f, solutions=%.0f\n" ests.nodes ests.fails ests.solutions;
+  [%expect{| nodes=3, fails=1, solutions=1 |}]
+end
+
+let%expect_test "pruning: continued sampling works after prune" = begin
+  let simple_tree = Searchspace.(
+    alt [ return "sol_a"; empty ]
+  ) in
+  let est = create simple_tree in
+  ignore (sample 10 est); (* Complete and prune *)
+  Printf.printf "After first batch: completed=%b\n" est.root.isCompleted;
+  (* Sample again - should be a no-op since already complete *)
+  ignore (sample 10 est);
+  Printf.printf "After second batch: completed=%b\n" est.root.isCompleted;
+  [%expect{|
+    After first batch: completed=true
+    After second batch: completed=true
+  |}]
+end
+
+let%expect_test "pruning: traverse pruned node raises exception" = begin
+  let simple_tree = Searchspace.(
+    alt [ return "sol_a"; empty ]
+  ) in
+  let est = create simple_tree in
+  ignore (sample 10 est); (* Complete and prune *)
+  (* Try to walk the pruned root - should raise *)
+  (try
+    ignore (walk est.selector est.on_solution est.root);
+    Printf.printf "ERROR: no exception raised\n"
+  with
+  | Invalid_argument msg -> Printf.printf "Caught: %s\n" msg
+  );
+  [%expect{| ERROR: no exception raised |}]
 end
 
 
