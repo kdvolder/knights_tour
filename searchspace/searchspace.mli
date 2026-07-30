@@ -172,3 +172,7 @@ type 'a node_view =
     | Fail
 
 val inspect : 'a t -> 'a node_view
+
+(** [memfree ()] returns the fraction of free memory (0.0 to 1.0).
+    Reads from /proc/meminfo and is cached for performance. *)
+val memfree : unit -> float

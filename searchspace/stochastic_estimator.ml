@@ -1834,3 +1834,139 @@ let%expect_test "greedy_completion_selector: step-by-step inspection" = begin
             Fork [samples=1 nodes=1. completed=true materialized=1 pruned=0] **PRUNED**
     |}]
 end
+
+(** ============================================================================
+    Phase 1: Memory-Aware Selector Scenario Test
+    ============================================================================ **)
+
+(** Memory-aware selector that switches between undersampled and greedy modes.
+    When memory is plentiful (below threshold), uses undersampled_selector to spread
+    samples across branches. When memory is tight (above threshold), switches to
+    greedy_completion_selector to focus on completing branches, enabling pruning.
+    
+    @param threshold Memory usage threshold (default 0.8 = 80%). Above this, switches to greedy.
+    @param memfree Function that returns the fraction of free memory (default: Searchspace.memfree)
+    @param node The fork node to select a child from
+    @return Index of the selected child *)
+let memory_aware_selector ?(threshold = 0.8) ?(memfree=memfree) () (node : 'a node) : int =
+  let free_ratio = memfree () in
+  if 1.0 -. free_ratio > threshold then greedy_completion_selector node
+  else undersampled_selector node
+
+let%expect_test "memory_aware_selector: scenario - switches between undersampled and greedy" = begin
+  Random.full_init [|42|];
+  
+  (* Create a tree with 3 children, each leading to a deeper subtree *)
+  let tree = Searchspace.(
+    alt [
+      alt [return "A1"; return "A2"];
+      alt [return "B1"; return "B2"];
+      alt [return "C1"; return "C2"]
+    ]
+  ) in
+  
+  (* Mock memfree: calculate memory pressure from materialized nodes *)
+  let max_memory = ref 10 in
+  let memory_used = ref 0 in
+  let mock_memfree () : float =
+    (* free_ratio decreases as memory_used increases *)
+    let used = Float.of_int !memory_used in
+    let max_m = Float.of_int !max_memory in
+    if used >= max_m then 0.0 else 1.0 -. (used /. max_m)
+  in
+  
+  (* Create estimator with memory_aware_selector, threshold at 50% usage *)
+  let selector = memory_aware_selector ~threshold:0.5 ~memfree:mock_memfree () in
+  let est = create ~selector tree in
+  
+  (* Helper to update mock memory from actual tree state *)
+  let update_memory () =
+    memory_used := est.root.materialized_nodes - est.root.pruned_nodes
+  in
+  
+  (* Helper to print current mode *)
+  let print_mode () =
+    update_memory ();
+    let free_ratio = mock_memfree () in
+    let usage = 1.0 -. free_ratio in
+    if usage > 0.5 then Printf.printf "Mode: GREEDY (usage=%.0f%%)\n" (usage *. 100.0)
+    else Printf.printf "Mode: UNDERSAMPLED (usage=%.0f%%)\n" (usage *. 100.0)
+  in
+  
+  Printf.printf "=== Initial state ===\n";
+  print_mode ();
+  Printf.printf "Root: samples=%d materialized=%d pruned=%d\n" est.root.samples est.root.materialized_nodes est.root.pruned_nodes;
+  
+  for batch = 1 to 8 do
+    ignore (sample 1 est);
+    Printf.printf "\n=== After sample %d ===\n" batch;
+    print_mode ();
+    Printf.printf "Root: samples=%d materialized=%d pruned=%d\n" est.root.samples est.root.materialized_nodes est.root.pruned_nodes;
+    
+    (* Print child summary *)
+    match est.root.node_view with
+    | Fork _ ->
+        for i = 0 to Array.length est.root.children - 1 do
+          match est.root.children.(i) with
+          | Some c ->
+              Printf.printf "  Child %d: samples=%d completed=%b materialized=%d\n" 
+                i c.samples c.isCompleted c.materialized_nodes
+          | None ->
+              Printf.printf "  Child %d: not materialized\n" i
+        done
+    | _ -> ()
+  done;
+  
+  [%expect{|
+    === Initial state ===
+    Mode: UNDERSAMPLED (usage=10%)
+    Root: samples=0 materialized=1 pruned=0
+
+    === After sample 1 ===
+    Mode: UNDERSAMPLED (usage=30%)
+    Root: samples=1 materialized=3 pruned=0
+      Child 0: not materialized
+      Child 1: samples=1 completed=false materialized=2
+      Child 2: not materialized
+
+    === After sample 2 ===
+    Mode: UNDERSAMPLED (usage=50%)
+    Root: samples=2 materialized=5 pruned=0
+      Child 0: not materialized
+      Child 1: samples=1 completed=false materialized=2
+      Child 2: samples=1 completed=false materialized=2
+
+    === After sample 3 ===
+    Mode: GREEDY (usage=70%)
+    Root: samples=3 materialized=7 pruned=0
+      Child 0: samples=1 completed=false materialized=2
+      Child 1: samples=1 completed=false materialized=2
+      Child 2: samples=1 completed=false materialized=2
+
+    === After sample 4 ===
+    Mode: GREEDY (usage=60%)
+    Root: samples=4 materialized=8 pruned=2
+      Child 0: samples=1 completed=false materialized=2
+      Child 1: samples=2 completed=true materialized=3
+      Child 2: samples=1 completed=false materialized=2
+
+    === After sample 5 ===
+    Mode: UNDERSAMPLED (usage=50%)
+    Root: samples=5 materialized=9 pruned=4
+      Child 0: samples=2 completed=true materialized=3
+      Child 1: samples=2 completed=true materialized=3
+      Child 2: samples=1 completed=false materialized=2
+
+    === After sample 6 ===
+    Mode: UNDERSAMPLED (usage=10%)
+    Root: samples=6 materialized=10 pruned=9
+
+    === After sample 7 ===
+    Mode: UNDERSAMPLED (usage=10%)
+    Root: samples=6 materialized=10 pruned=9
+
+    === After sample 8 ===
+    Mode: UNDERSAMPLED (usage=10%)
+    Root: samples=6 materialized=10 pruned=9
+    |}]
+end

@@ -34,6 +34,17 @@ val greedy_completion_selector : 'a child_selector
 (** Picks the child with the least remaining unmaterialized work.
     Drives branches to completion faster, enabling pruning and memory reclamation. *)
 
+val memory_aware_selector : ?threshold:float -> ?memfree:(unit -> float) -> unit -> 'a child_selector
+(** Memory-aware selector that switches between undersampled and greedy modes.
+    When memory is plentiful (below threshold), uses [undersampled_selector] to spread
+    samples across branches. When memory is tight (above threshold), switches to
+    [greedy_completion_selector] to focus on completing branches, enabling pruning.
+    
+    @param threshold Memory usage threshold (default 0.8 = 80%). Above this, switches to greedy.
+    @param memfree Function that returns the fraction of free memory (default: [Searchspace.memfree])
+    @param node The fork node to select a child from
+    @return Index of the selected child *)
+
 type estimates = {
     nodes : float;
     (** The estimated number of nodes in the search space. *)
