@@ -308,10 +308,14 @@ end)
 `Gc.stat()` triggers a full major collection, which is expensive. Options:
 
 1. **Cache results**: Call `Gc.stat()` once per batch (not per selector call)
-2. **Use `Gc.quick_stat()`**: Faster but doesn't include `live_words`, `free_words` — not useful for debt calculation
+2. **Use `Gc.quick_stat()`**: Faster but doesn't include `live_words`, `free_words` — **NOT useful for debt calculation**
 3. **Call on schedule**: Call every N samples, cache result
 
-**Recommendation**: Cache results between selector calls within a batch. Call `Gc.stat()` once per batch and reuse the result for all selector calls in that batch.
+**Critical finding from testing**: `Gc.quick_stat()` returns `heap_words` and `top_heap_words`, but these **never change** — OCaml's heap never shrinks. After growing to 10GB and shrinking to 256MB, both values stayed at the peak. The ratio `heap_words / top_heap_words` is always 1.000 regardless of actual live memory usage.
+
+**Conclusion**: `Gc.quick_stat()` is **completely useless** for the debt model. We **must** use `Gc.stat()` to get `live_words` and `free_words`, which only come from the expensive full GC call.
+
+**Recommendation**: Cache results between selector calls within a batch. Call `Gc.stat()` once per batch and reuse the result for all selector calls in that batch. The GC pause happens anyway during major collections, so we piggyback on it.
 
 ### Debt Coverage Calculation
 
