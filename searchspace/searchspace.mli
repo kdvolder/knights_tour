@@ -183,4 +183,6 @@ val memfree : unit -> float
     Returns heap usage in MB (pool_live + large_alloc words * 8 bytes). *)
 val init_runtime_events : unit -> bool
 val poll_runtime_events : unit -> unit
+val heap_usage_words : unit -> int
+(** Returns total live memory in OCaml words (pool_live + large_alloc). *)
 val heap_usage_mb : unit -> float
