@@ -281,23 +281,16 @@ end)
 
 ### Phase 3: Integration with Solver
 
-```ocaml
-let%test_module "solver_integration" = (module struct
-  
-  (* Test: gradual braking selector works with estimate_polyomino *)
-  let test_selector_works_with_solver () = 
-    (* Run estimate_polyomino with gradual_braking_selector *)
-    (* Verify solver runs to completion, estimates are accurate *)
-    ...
-  
-  (* Test: memory stays below threshold *)
-  let test_memory_stays_below_threshold () = 
-    (* Run with low threshold (e.g., 2GB) *)
-    (* Monitor heap usage via Runtime_events between batches *)
-    (* Verify memory stabilizes below threshold, not overshooting *)
-    ...
-end)
-```
+Manual testing recommended for formula verification:
+- Run `estimate_polyomino` with gradual braking selector
+- Monitor heap usage via Runtime_events between batches
+- Verify memory stabilizes below threshold, not overshooting
+- Compare with binary switching to verify less overshoot
+
+Automated tests can verify:
+- Selector API works correctly with injectable heap_usage_words
+- Counter increments on each selector invocation
+- Threshold conversion from MB to words is correct
 
 ## Implementation Details
 
