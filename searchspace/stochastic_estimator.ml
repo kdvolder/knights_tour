@@ -2012,12 +2012,16 @@ let gradual_braking_selector ?(threshold_mb = 8000.0)
       greedy_completion_selector node
     )
   in
-  let get_stats () : gradual_braking_stats = {
+  let get_stats () : gradual_braking_stats = 
+    let r = {
     total_calls = !total_calls;
     undersampled_count = !undersampled_count;
     greedy_count = !greedy_count;
-  } in
-  (selector, get_stats)
+    } in begin
+      undersampled_count := 0; greedy_count := 0;
+      r
+    end
+  in (selector, get_stats)
 
 (** ============================================================================
     Gradual Braking Selector Tests
