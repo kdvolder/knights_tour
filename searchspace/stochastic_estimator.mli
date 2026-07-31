@@ -45,16 +45,28 @@ val memory_aware_selector : ?threshold:float -> ?memfree:(unit -> float) -> unit
     @param node The fork node to select a child from
     @return Index of the selected child *)
 
-val gradual_braking_selector : ?threshold_mb:float -> ?heap_usage_words:(unit -> int) -> unit -> 'a child_selector
+type gradual_braking_stats = {
+  total_calls : int;
+  (** Total number of times the selector has been invoked. *)
+  undersampled_count : int;
+  (** Number of times undersampled_selector was used. *)
+  greedy_count : int;
+  (** Number of times greedy_completion_selector was used. *)
+}
+(** Statistics tracking which strategy the gradual braking selector used. *)
+
+val gradual_braking_selector : ?threshold_mb:float -> ?heap_usage_words:(unit -> int) -> unit -> ('a child_selector * (unit -> gradual_braking_stats))
 (** Gradual braking selector that eases off undersampled behavior as heap usage approaches a threshold.
     Uses the formula U + (C mod T) < T to provide linear decay blending from 100% undersampled
     at U=0 to 0% undersampled at U=T. Prevents the "freight train" overshoot problem by starting
     braking immediately rather than waiting for memory pressure to hit a hard threshold.
     
+    Returns a tuple of (selector_function, stats_accessor). The stats accessor provides
+    cumulative counts of which strategy was used across all calls.
+    
     @param threshold_mb Memory usage threshold in MB (default 8000 = 8GB). Above this, undersampled probability reaches 0%.
     @param heap_usage_words Function that returns current OCaml heap usage in words (default: [Searchspace.heap_usage_words])
-    @param node The fork node to select a child from
-    @return Index of the selected child *)
+    @return Tuple of (selector function, stats accessor) *)
 
 type estimates = {
     nodes : float;

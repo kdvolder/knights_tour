@@ -1972,206 +1972,132 @@ let%expect_test "memory_aware_selector: scenario - switches between undersampled
 end
 
 (** ============================================================================
-    Phase 2: Gradual Braking Selector Implementation
+    Gradual Braking Selector Implementation
     ============================================================================ **)
+
+(** Statistics tracking which strategy was used by the gradual braking selector. *)
+type gradual_braking_stats = {
+  total_calls : int;
+  undersampled_count : int;
+  greedy_count : int;
+}
 
 (** Gradual braking selector that eases off undersampled behavior as heap usage approaches a threshold.
     Uses the formula U + (C mod T) < T to provide linear decay blending from 100% undersampled
     at U=0 to 0% undersampled at U=T. Prevents the "freight train" overshoot problem by starting
     braking immediately rather than waiting for memory pressure to hit a hard threshold.
     
+    Returns a tuple of (selector_function, stats_accessor). The stats accessor provides
+    cumulative counts of which strategy was used across all calls.
+    
     @param threshold_mb Memory usage threshold in MB (default 8000 = 8GB). Above this, undersampled probability reaches 0%.
     @param heap_usage_words Function that returns current OCaml heap usage in words (default: [Searchspace.heap_usage_words])
-    @param node The fork node to select a child from
-    @return Index of the selected child *)
-let gradual_braking_call_counter : int ref = ref 0
-
+    @return Tuple of (selector function, stats accessor) *)
 let gradual_braking_selector ?(threshold_mb = 8000.0) 
                              ?(heap_usage_words=Searchspace.heap_usage_words)
-  () (node : 'a node) : int =
-  incr gradual_braking_call_counter;
-  let c = !gradual_braking_call_counter in
-  let u_words = heap_usage_words () in
+  () : ('a node -> int) * (unit -> gradual_braking_stats) =
+  let total_calls = ref 0 in
+  let undersampled_count = ref 0 in
+  let greedy_count = ref 0 in
   let t_words = int_of_float (threshold_mb *. 1024.0 *. 1024.0 /. Float.of_int Sys.word_size) in
-  let should_undersample = u_words + (c mod t_words) < t_words in
-  if should_undersample then undersampled_selector node
-  else greedy_completion_selector node
-
-(** Reset the call counter (useful for testing to get reproducible results). *)
-let reset_gradual_braking_counter () = gradual_braking_call_counter := 0
-[@@warning "-32"]
+  let selector (node : 'a node) : int =
+    incr total_calls;
+    let c = !total_calls in
+    let u_words = heap_usage_words () in
+    if u_words + (c mod t_words) < t_words then (
+      incr undersampled_count;
+      undersampled_selector node
+    ) else (
+      incr greedy_count;
+      greedy_completion_selector node
+    )
+  in
+  let get_stats () : gradual_braking_stats = {
+    total_calls = !total_calls;
+    undersampled_count = !undersampled_count;
+    greedy_count = !greedy_count;
+  } in
+  (selector, get_stats)
 
 (** ============================================================================
-    Phase 3: Gradual Braking Selector Tests
+    Gradual Braking Selector Tests
     ============================================================================ **)
 
-let%expect_test "gradual_braking_selector: formula behavior at key points" = begin
+(* Build a search space large enough to sample many times without exhausting. *)
+(* int_range creates nested binary choices, but we just need enough depth for 100+ samples *)
+let large_tree () : (int * int * int) Searchspace.t =
+  let* x = Searchspace.int_range 1 5 in
+  let* y = Searchspace.int_range 1 5 in
+  let* z = Searchspace.int_range 1 5 in
+  return (x, y, z)
+
+let%expect_test "selector: U=0 always undersampled" = begin
   Random.full_init [|42|];
-  reset_gradual_braking_counter ();
-  
-  (* Create a simple tree with 2 children *)
-  let tree = Searchspace.(
-    alt [ return "A"; return "B" ]
-  ) in
-  
-  (* Helper to simulate heap usage and count undersampled vs greedy *)
-  let test_heap_usage heap_words threshold_mb num_calls =
-    reset_gradual_braking_counter ();
-    let undersampled_count = ref 0 in
-    let greedy_count = ref 0 in
-    (* Create a wrapper selector that tracks which mode was used *)
-    let base_selector = gradual_braking_selector ~threshold_mb 
-      ~heap_usage_words:(fun () -> heap_words) in
-    let selector = base_selector () in
-    (* Create a node to pass to the selector *)
-    let est = create ~selector tree in
-    (* Call the selector directly num_calls times (bypassing walk) *)
-    for _i = 1 to num_calls do
-      let chosen = selector est.root in
-      (* The gradual_braking_selector calls either undersampled_selector or greedy_completion_selector.
-         We can't easily distinguish which was called, so we just track that the selector was invoked. *)
-      (* Instead, let's verify the formula by checking the counter and heap usage values. *)
-      ()
-    done;
-    (* Return the final counter value and heap usage for verification *)
-    (!gradual_braking_call_counter, !undersampled_count, !greedy_count)
-  in
-  
-  (* Use a threshold of 100 words for testing the formula behavior *)
-  let test_threshold = Float.of_int (100 * Sys.word_size) /. (1024.0 *. 1024.0) in
-  let t_words = int_of_float (test_threshold *. 1024.0 *. 1024.0 /. Float.of_int Sys.word_size) in
-  
-  (* Test at U=0: should be 100% undersampled *)
-  Printf.printf "U=0 (heap=0 words): ";
-  let (counter, _, _) = test_heap_usage 0 test_threshold 100 in
-  Printf.printf "counter=%d (expected 100)\n" counter;
-  
-  (* Test at U=T/2: should be ~50% undersampled *)
-  Printf.printf "U=T/2 (heap=%d words): " (t_words / 2);
-  let (counter, _, _) = test_heap_usage (t_words / 2) test_threshold 100 in
-  Printf.printf "counter=%d (expected 100)\n" counter;
-  
-  (* Test at U=T: should be 0% undersampled *)
-  Printf.printf "U=T (heap=%d words): " t_words;
-  let (counter, _, _) = test_heap_usage t_words test_threshold 100 in
-  Printf.printf "counter=%d (expected 100)\n" counter;
-  
-  [%expect{|
-    U=0 (heap=0 words): counter=100 (expected 100)
-    U=T/2 (heap=50 words): counter=100 (expected 100)
-    U=T (heap=100 words): counter=100 (expected 100)
-  |}]
+  let tree = large_tree () in
+  let selector, get_stats = gradual_braking_selector 
+    ~threshold_mb:(Float.of_int (10 * Sys.word_size) /. 1024.0 /. 1024.0)
+    ~heap_usage_words:(fun () -> 0) () in
+  let est = create ~selector tree in
+  for _batch = 1 to 50 do ignore (sample 1 est) done;
+  let s = get_stats () in
+  Printf.printf "total=%d undersampled=%d greedy=%d\n" 
+    s.total_calls s.undersampled_count s.greedy_count;
+  [%expect{| total=359 undersampled=359 greedy=0 |}]
 end
 
-let%expect_test "gradual_braking_selector: scenario - linear decay across heap growth" = begin
+let%expect_test "selector: U=T always greedy" = begin
   Random.full_init [|42|];
-  reset_gradual_braking_counter ();
-  
-  (* Create a tree with 3 children *)
-  let tree = Searchspace.(
-    alt [
-      alt [return "A1"; return "A2"];
-      alt [return "B1"; return "B2"];
-      alt [return "C1"; return "C2"]
-    ]
-  ) in
-  
-  (* Mock heap_usage_words: simulate heap growing from 0 to 16GB in words *)
-  let current_heap = ref 0 in
-  let mock_heap_usage () = !current_heap in
-  
-  (* Create selector with threshold at 8GB *)
-  let selector = gradual_braking_selector ~threshold_mb:8000.0 
-    ~heap_usage_words:mock_heap_usage () in
+  let t_words = 10 in
+  let tree = large_tree () in
+  let selector, get_stats = gradual_braking_selector 
+    ~threshold_mb:(Float.of_int (t_words * Sys.word_size) /. 1024.0 /. 1024.0)
+    ~heap_usage_words:(fun () -> t_words) () in
   let est = create ~selector tree in
-  
-  (* Helper to update mock heap from actual tree state *)
-  let update_heap () =
-    current_heap := (est.root.materialized_nodes - est.root.pruned_nodes) * 1024
-  in
-  
-  (* Helper to print current mode *)
-  let print_mode () =
-    update_heap ();
-    let heap_mb = Float.of_int !current_heap *. Float.of_int Sys.word_size /. (1024.0 *. 1024.0) in
-    let t_words = int_of_float (8000.0 *. 1024.0 *. 1024.0 /. Float.of_int Sys.word_size) in
-    let c = !gradual_braking_call_counter in
-    let should_undersample = !current_heap + (c mod t_words) < t_words in
-    Printf.printf "Heap: %.1f MB, Calls: %d, Mode: %s\n" 
-      heap_mb c (if should_undersample then "UNDERSAMPLED" else "GREEDY")
-  in
-  
-  Printf.printf "=== Initial state ===\n";
-  print_mode ();
-  
-  for batch = 1 to 20 do
-    ignore (sample 5 est);
-    Printf.printf "\n=== After sample %d ===\n" batch;
-    print_mode ();
-  done;
-  
+  for _batch = 1 to 50 do ignore (sample 1 est) done;
+  let s = get_stats () in
+  Printf.printf "total=%d undersampled=%d greedy=%d\n" 
+    s.total_calls s.undersampled_count s.greedy_count;
+  [%expect{| total=404 undersampled=0 greedy=404 |}]
+end
+
+let%expect_test "selector: U=T/2 gives ~50% undersampled" = begin
+  Random.full_init [|42|];
+  let t_words = 10 in
+  let tree = large_tree () in
+  let selector, get_stats = gradual_braking_selector 
+    ~threshold_mb:(Float.of_int (t_words * Sys.word_size) /. 1024.0 /. 1024.0)
+    ~heap_usage_words:(fun () -> t_words / 2) () in
+  let est = create ~selector tree in
+  for _batch = 1 to 100 do ignore (sample 1 est) done;
+  let s = get_stats () in
+  Printf.printf "total=%d undersampled=%d greedy=%d\n" 
+    s.total_calls s.undersampled_count s.greedy_count;
+  [%expect{| total=831 undersampled=416 greedy=415 |}]
+end
+
+let%expect_test "selector: stats are independent per selector" = begin
+  Random.full_init [|42|];
+  let t_words = 10 in
+  let tree_a = large_tree () in
+  let tree_b = large_tree () in
+  let sel_a, get_stats_a = gradual_braking_selector 
+    ~threshold_mb:(Float.of_int (t_words * Sys.word_size) /. 1024.0 /. 1024.0)
+    ~heap_usage_words:(fun () -> 0) () in
+  let sel_b, get_stats_b = gradual_braking_selector 
+    ~threshold_mb:(Float.of_int (t_words * Sys.word_size) /. 1024.0 /. 1024.0)
+    ~heap_usage_words:(fun () -> t_words) () in
+  let est_a = create ~selector:sel_a tree_a in
+  let est_b = create ~selector:sel_b tree_b in
+  for _batch = 1 to 20 do ignore (sample 1 est_a) done;
+  for _batch = 1 to 20 do ignore (sample 1 est_b) done;
+  let sa = get_stats_a () in
+  let sb = get_stats_b () in
+  Printf.printf "A: total=%d undersampled=%d greedy=%d\n" 
+    sa.total_calls sa.undersampled_count sa.greedy_count;
+  Printf.printf "B: total=%d undersampled=%d greedy=%d\n" 
+    sb.total_calls sb.undersampled_count sb.greedy_count;
   [%expect{|
-    === Initial state ===
-    Heap: 0.0 MB, Calls: 0, Mode: UNDERSAMPLED
-    
-    === After sample 1 ===
-    Heap: 0.0 MB, Calls: 5, Mode: UNDERSAMPLED
-    
-    === After sample 2 ===
-    Heap: 0.0 MB, Calls: 10, Mode: UNDERSAMPLED
-    
-    === After sample 3 ===
-    Heap: 0.0 MB, Calls: 15, Mode: UNDERSAMPLED
-    
-    === After sample 4 ===
-    Heap: 0.0 MB, Calls: 20, Mode: UNDERSAMPLED
-    
-    === After sample 5 ===
-    Heap: 0.0 MB, Calls: 25, Mode: UNDERSAMPLED
-    
-    === After sample 6 ===
-    Heap: 0.0 MB, Calls: 30, Mode: UNDERSAMPLED
-    
-    === After sample 7 ===
-    Heap: 0.0 MB, Calls: 35, Mode: UNDERSAMPLED
-    
-    === After sample 8 ===
-    Heap: 0.0 MB, Calls: 40, Mode: UNDERSAMPLED
-    
-    === After sample 9 ===
-    Heap: 0.0 MB, Calls: 45, Mode: UNDERSAMPLED
-    
-    === After sample 10 ===
-    Heap: 0.0 MB, Calls: 50, Mode: UNDERSAMPLED
-    
-    === After sample 11 ===
-    Heap: 0.0 MB, Calls: 55, Mode: UNDERSAMPLED
-    
-    === After sample 12 ===
-    Heap: 0.0 MB, Calls: 60, Mode: UNDERSAMPLED
-    
-    === After sample 13 ===
-    Heap: 0.0 MB, Calls: 65, Mode: UNDERSAMPLED
-    
-    === After sample 14 ===
-    Heap: 0.0 MB, Calls: 70, Mode: UNDERSAMPLED
-    
-    === After sample 15 ===
-    Heap: 0.0 MB, Calls: 75, Mode: UNDERSAMPLED
-    
-    === After sample 16 ===
-    Heap: 0.0 MB, Calls: 80, Mode: UNDERSAMPLED
-    
-    === After sample 17 ===
-    Heap: 0.0 MB, Calls: 85, Mode: UNDERSAMPLED
-    
-    === After sample 18 ===
-    Heap: 0.0 MB, Calls: 90, Mode: UNDERSAMPLED
-    
-    === After sample 19 ===
-    Heap: 0.0 MB, Calls: 95, Mode: UNDERSAMPLED
-    
-    === After sample 20 ===
-    Heap: 0.0 MB, Calls: 100, Mode: UNDERSAMPLED
-  |}]
+    A: total=129 undersampled=129 greedy=0
+    B: total=150 undersampled=0 greedy=150
+    |}]
 end
