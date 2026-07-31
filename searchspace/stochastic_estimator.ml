@@ -2038,7 +2038,7 @@ let%expect_test "selector: U=0 always undersampled" = begin
     ~threshold_mb:(Float.of_int (10 * Sys.word_size) /. 1024.0 /. 1024.0)
     ~heap_usage_words:(fun () -> 0) () in
   let est = create ~selector tree in
-  for _batch = 1 to 50 do ignore (sample 1 est) done;
+  ignore (sample 50 est);
   let s = get_stats () in
   Printf.printf "total=%d undersampled=%d greedy=%d\n" 
     s.total_calls s.undersampled_count s.greedy_count;
@@ -2053,7 +2053,7 @@ let%expect_test "selector: U=T always greedy" = begin
     ~threshold_mb:(Float.of_int (t_words * Sys.word_size) /. 1024.0 /. 1024.0)
     ~heap_usage_words:(fun () -> t_words) () in
   let est = create ~selector tree in
-  for _batch = 1 to 50 do ignore (sample 1 est) done;
+  ignore (sample 50 est);
   let s = get_stats () in
   Printf.printf "total=%d undersampled=%d greedy=%d\n" 
     s.total_calls s.undersampled_count s.greedy_count;
@@ -2068,7 +2068,7 @@ let%expect_test "selector: U=T/2 gives ~50% undersampled" = begin
     ~threshold_mb:(Float.of_int (t_words * Sys.word_size) /. 1024.0 /. 1024.0)
     ~heap_usage_words:(fun () -> t_words / 2) () in
   let est = create ~selector tree in
-  for _batch = 1 to 100 do ignore (sample 1 est) done;
+  ignore (sample 100 est);
   let s = get_stats () in
   Printf.printf "total=%d undersampled=%d greedy=%d\n" 
     s.total_calls s.undersampled_count s.greedy_count;
@@ -2088,8 +2088,8 @@ let%expect_test "selector: stats are independent per selector" = begin
     ~heap_usage_words:(fun () -> t_words) () in
   let est_a = create ~selector:sel_a tree_a in
   let est_b = create ~selector:sel_b tree_b in
-  for _batch = 1 to 20 do ignore (sample 1 est_a) done;
-  for _batch = 1 to 20 do ignore (sample 1 est_b) done;
+  ignore (sample 20 est_a);
+  ignore (sample 20 est_b);
   let sa = get_stats_a () in
   let sb = get_stats_b () in
   Printf.printf "A: total=%d undersampled=%d greedy=%d\n" 
