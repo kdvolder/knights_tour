@@ -26,7 +26,7 @@ let solutions_file_extension () =
   let year = today.tm_year + 1900 in
   let hour = today.tm_hour in
   let min = today.tm_min in
-  (Printf.sprintf "%04d-%02d-%02d-%02d-%02d.txt" year month day hour min)
+  (Printf.sprintf "%04d-%02d-%02d-%02d-%02d.sol" year month day hour min)
   
 
 let () =
