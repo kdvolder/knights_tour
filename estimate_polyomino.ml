@@ -49,13 +49,13 @@ let () =
     In_channel.with_open_text puzzle_file Puzzle.load
   in
   let searchspace = Puzzle.solve puzzle in
-  let (selector, _) = Stochastic_estimator.gradual_braking_selector ~threshold_mb:8. () in
+  let (selector, get_stats) = Stochastic_estimator.gradual_braking_selector ~threshold_mb:8000. () in
   (*let selector = Stochastic_estimator.memory_aware_selector ~threshold:0.3 () in*)
   (* let selector = Stochastic_estimator.probabilistic_undersampled_selector in *)
   let estimator = Stochastic_estimator.create ~on_solution ~selector searchspace in
   
-  Printf.printf "%-5s | %-7s | %-12s | %-12s | %-8s | %-6s | %-12s | %-10s | %-10s | %-11s | %-8s | %-12s | %s\n%!" "Batch" "Samples" "Nodes Est" "Fails Est" "Sols Est" "Found" "Materialized" "Pruned" "Net Nodes" "%Complete" "Mem.Mb" "Elapsed" "ETA";
-  Printf.printf "----- | ------- | ------------ | ------------ | -------- | ------ | ------------ | ---------- | ---------- | ----------- | -------- | ------------ | ------------------\n%!";
+  Printf.printf "%-5s | %-7s | %-12s | %-12s | %-8s | %-6s | %-12s | %-10s | %-10s | %-6s | %-8s | %-12s | %s\n%!" "Batch" "Samples" "Nodes Est" "Fails Est" "Sols Est" "Found" "Materialized" "Pruned" "Net Nodes" "%Under" "Mem.Mb" "Elapsed" "ETA";
+  Printf.printf "----- | ------- | ------------ | ------------ | -------- | ------ | ------------ | ---------- | ---------- | ------ | -------- | ------------ | ------------------\n%!";
   
   let batch_count = ref 0 in
   let total_samples = ref 0 in
@@ -66,14 +66,19 @@ let () =
     Searchspace.poll_runtime_events ();
     let free_pct = Searchspace.heap_usage_mb () in
     let net_nodes = p.materialized_nodes - p.pruned_nodes in
-    Printf.printf "%-5d | %-7d | %12s | %12s | %-8s | %-6d | %12d | %10d | %10d | %10.2e%% | %-8.1f | %-12s | %-10s\n%!"
+    let stats = get_stats () in
+    let batch_total = stats.undersampled_count + stats.greedy_count in
+    let undersampled_pct =
+      if batch_total > 0 then Float.of_int stats.undersampled_count /. Float.of_int batch_total *. 100.0
+      else 0.0 in
+    Printf.printf "%-5d | %-7d | %12s | %12s | %-8s | %-6d | %12d | %10d | %10d | %5.1f%% | %-8.1f | %-12s | %-10s\n%!"
       !batch_count !total_samples
       (format_number est.nodes) (format_number est.fails) (format_number est.solutions)
       !found_count
       p.materialized_nodes
       p.pruned_nodes
       net_nodes
-      p.progress_percent
+      undersampled_pct
       free_pct
       (Stochastic_estimator.format_time p.elapsed_seconds)
       (Stochastic_estimator.format_time p.estimated_remaining_seconds)
