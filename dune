@@ -1,5 +1,10 @@
 
 (executables
- (names        solve_file random_hexo_puzzle pento_solve hexo_solve solve        play        benchmark estimate_polyomino estimate_classic_pento test_convergence analyze_depths test_gc_mem)
- (public_names solve_file random_hexo_puzzle pento_solve hexo_solve knight_solve knight_play - estimate_polyomino estimate_classic_pento test_convergence analyze_depths test_gc_mem)
- (libraries stdio graphics unix knights_tour pentominos searchspace))
+ (names        solve_file random_hexo_puzzle pento_solve hexo_solve solve        play        benchmark estimate_polyomino estimate_classic_pento test_convergence analyze_depths test_gc_mem test_gc_mem_frag)
+ (public_names solve_file random_hexo_puzzle pento_solve hexo_solve knight_solve knight_play - estimate_polyomino estimate_classic_pento test_convergence analyze_depths test_gc_mem test_gc_mem_frag)
+ (libraries stdio graphics unix knights_tour pentominos searchspace runtime_events))
+
+(executable
+ (name test_gc_runtime_events)
+ (public_name test_gc_runtime_events)
+ (libraries stdio unix runtime_events))

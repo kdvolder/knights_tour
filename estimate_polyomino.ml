@@ -8,7 +8,26 @@ let format_number n =
 
 let batch_size = 1000
 
-let solutions_file_extension () = 
+(* Runtime_events-based memory measurement - initialized once at startup *)
+let re_available = ref false
+
+let init_runtime_events () =
+  re_available := Searchspace.init_runtime_events ();
+  if !re_available then begin
+    Searchspace.poll_runtime_events ();
+    Printf.eprintf "[RuntimeEvents] Initial heap: %.1f MB\n" (Searchspace.heap_usage_mb ());
+    flush stderr
+  end
+
+let log_heap_usage batch_num =
+  if !re_available then begin
+    Searchspace.poll_runtime_events ();
+    let mb = Searchspace.heap_usage_mb () in
+    Printf.eprintf "[RuntimeEvents] Batch %d: heap = %.1f MB\n" batch_num mb;
+    flush stderr
+  end
+
+let solutions_file_extension () =
   let today = Unix.localtime (Unix.time ()) in
   let day = today.tm_mday in
   let month = today.tm_mon+1 in
@@ -31,6 +50,9 @@ let () =
     incr found_count;
     Printf.fprintf out_ch "Solution %d:\n%s\n---\n%!" !found_count (Pentominos.Board.to_string solution)
   in
+  (* Initialize Runtime_events memory measurement *)
+  init_runtime_events ();
+  
   let puzzle =
     In_channel.with_open_text puzzle_file Puzzle.load
   in
@@ -39,8 +61,8 @@ let () =
   (* let selector = Stochastic_estimator.probabilistic_undersampled_selector in *)
   let estimator = Stochastic_estimator.create ~on_solution ~selector searchspace in
   
-  Printf.printf "%-5s | %-7s | %-12s | %-12s | %-8s | %-6s | %-12s | %-10s | %-10s | %-8s | %-10s | %s\n" "Batch" "Samples" "Nodes Est" "Fails Est" "Sols Est" "Found" "Materialized" "%Complete" "Pruned" "%Free" "Elapsed" "ETA";
-  Printf.printf "----- | ------- | ------------ | ------------ | -------- | ------ | ------------ | ---------- | ---------- | -------- | ---------- | ------------------\n";
+  Printf.printf "%-5s | %-7s | %-12s | %-12s | %-8s | %-6s | %-12s | %-10s | %-10s | %-8s | %-10s | %s\n%!" "Batch" "Samples" "Nodes Est" "Fails Est" "Sols Est" "Found" "Materialized" "%Complete" "Pruned" "%Free" "Elapsed" "ETA";
+  Printf.printf "----- | ------- | ------------ | ------------ | -------- | ------ | ------------ | ---------- | ---------- | -------- | ---------- | ------------------\n%!";
   
   let batch_count = ref 0 in
   let total_samples = ref 0 in
@@ -58,10 +80,15 @@ let () =
       p.pruned_nodes
       free_pct
       (Stochastic_estimator.format_time p.elapsed_seconds)
-      (Stochastic_estimator.format_time p.estimated_remaining_seconds)
+      (Stochastic_estimator.format_time p.estimated_remaining_seconds);
+    
+    (* Log heap usage *)
+    log_heap_usage !batch_count
   ) estimator;
   
   (* Final report *)
   let est = Stochastic_estimator.estimates estimator in
   Printf.printf "\nDone! Final estimates: nodes=%.0e, fails=%.0e, solutions=%.1f\n" est.nodes est.fails est.solutions;
+  
+
   close_out out_ch;
