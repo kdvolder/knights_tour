@@ -2031,48 +2031,33 @@ let large_tree () : (int * int * int) Searchspace.t =
   let* z = Searchspace.int_range 1 5 in
   return (x, y, z)
 
-let%expect_test "selector: U=0 always undersampled" = begin
-  Random.full_init [|42|];
-  let tree = large_tree () in
-  let selector, get_stats = gradual_braking_selector 
-    ~threshold_mb:(Float.of_int (10 * Sys.word_size) /. 1024.0 /. 1024.0)
-    ~heap_usage_words:(fun () -> 0) () in
-  let est = create ~selector tree in
-  ignore (sample 50 est);
-  let s = get_stats () in
-  Printf.printf "total=%d undersampled=%d greedy=%d\n" 
-    s.total_calls s.undersampled_count s.greedy_count;
-  [%expect{| total=359 undersampled=359 greedy=0 |}]
-end
-
-let%expect_test "selector: U=T always greedy" = begin
+let%expect_test "selector: linear decay across U/T ratios" = begin
   Random.full_init [|42|];
   let t_words = 10 in
-  let tree = large_tree () in
-  let selector, get_stats = gradual_braking_selector 
-    ~threshold_mb:(Float.of_int (t_words * Sys.word_size) /. 1024.0 /. 1024.0)
-    ~heap_usage_words:(fun () -> t_words) () in
-  let est = create ~selector tree in
-  ignore (sample 50 est);
-  let s = get_stats () in
-  Printf.printf "total=%d undersampled=%d greedy=%d\n" 
-    s.total_calls s.undersampled_count s.greedy_count;
-  [%expect{| total=404 undersampled=0 greedy=404 |}]
-end
-
-let%expect_test "selector: U=T/2 gives ~50% undersampled" = begin
-  Random.full_init [|42|];
-  let t_words = 10 in
-  let tree = large_tree () in
-  let selector, get_stats = gradual_braking_selector 
-    ~threshold_mb:(Float.of_int (t_words * Sys.word_size) /. 1024.0 /. 1024.0)
-    ~heap_usage_words:(fun () -> t_words / 2) () in
-  let est = create ~selector tree in
-  ignore (sample 100 est);
-  let s = get_stats () in
-  Printf.printf "total=%d undersampled=%d greedy=%d\n" 
-    s.total_calls s.undersampled_count s.greedy_count;
-  [%expect{| total=831 undersampled=416 greedy=415 |}]
+  Printf.printf "U/T | total | undersampled | greedy | %%undersampled\n";
+  Printf.printf "----+-------+--------------+--------+-------------\n";
+  for i = 0 to 4 do
+    let u_words = (i * t_words) / 4 in
+    let tree = large_tree () in
+    let selector, get_stats = gradual_braking_selector 
+      ~threshold_mb:(Float.of_int (t_words * Sys.word_size) /. 1024.0 /. 1024.0)
+      ~heap_usage_words:(fun () -> u_words) () in
+    let est = create ~selector tree in
+    ignore (sample 100 est);
+    let s = get_stats () in
+    let pct = Float.of_int s.undersampled_count /. Float.of_int s.total_calls *. 100.0 in
+    Printf.printf "%d/%4d | %5d | %12d | %6d | %.1f%%\n" 
+      i t_words s.total_calls s.undersampled_count s.greedy_count pct
+  done;
+  [%expect{|
+    U/T | total | undersampled | greedy | %undersampled
+    ----+-------+--------------+--------+-------------
+    0/  10 |   822 |          822 |      0 | 100.0%
+    1/  10 |   842 |          674 |    168 | 80.0%
+    2/  10 |   884 |          444 |    440 | 50.2%
+    3/  10 |   831 |          250 |    581 | 30.1%
+    4/  10 |   975 |            0 |    975 | 0.0%
+    |}]
 end
 
 let%expect_test "selector: stats are independent per selector" = begin
