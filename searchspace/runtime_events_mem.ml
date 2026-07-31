@@ -49,9 +49,9 @@ let init_runtime_events () : bool =
 let poll_runtime_events () : unit =
   match !cursor with
   | Some c ->
-      pool_live_words := 0;
-      large_words := 0;
-      
+      (* Don't reset counters here. read_poll only updates them when it reads
+         counter events from the ring buffer. If no new events are available,
+         we keep the last known values rather than dropping to 0. *)
       let counter_cb _domain_id _ts counter value =
         match counter with
         | Runtime_events.EV_C_MAJOR_HEAP_POOL_LIVE_WORDS -> pool_live_words := value
