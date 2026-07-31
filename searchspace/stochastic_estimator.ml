@@ -2033,7 +2033,7 @@ let large_tree () : (int * int * int) Searchspace.t =
 
 let%expect_test "selector: linear decay across U/T ratios" = begin
   Random.full_init [|42|];
-  let t_words = 10 in
+  let t_words = 100 in
   Printf.printf "U/T | total | undersampled | greedy | %%undersampled\n";
   Printf.printf "----+-------+--------------+--------+-------------\n";
   for i = 0 to 4 do
@@ -2047,16 +2047,16 @@ let%expect_test "selector: linear decay across U/T ratios" = begin
     let s = get_stats () in
     let pct = Float.of_int s.undersampled_count /. Float.of_int s.total_calls *. 100.0 in
     Printf.printf "%d/%4d | %5d | %12d | %6d | %.1f%%\n" 
-      i t_words s.total_calls s.undersampled_count s.greedy_count pct
+      u_words t_words s.total_calls s.undersampled_count s.greedy_count pct
   done;
   [%expect{|
     U/T | total | undersampled | greedy | %undersampled
     ----+-------+--------------+--------+-------------
-    0/  10 |   822 |          822 |      0 | 100.0%
-    1/  10 |   842 |          674 |    168 | 80.0%
-    2/  10 |   884 |          444 |    440 | 50.2%
-    3/  10 |   831 |          250 |    581 | 30.1%
-    4/  10 |   975 |            0 |    975 | 0.0%
+    0/ 100 |   822 |          822 |      0 | 100.0%
+    25/ 100 |   811 |          611 |    200 | 75.3%
+    50/ 100 |   805 |          405 |    400 | 50.3%
+    75/ 100 |   813 |          213 |    600 | 26.2%
+    100/ 100 |   904 |            0 |    904 | 0.0%
     |}]
 end
 
