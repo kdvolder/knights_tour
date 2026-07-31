@@ -63,13 +63,13 @@ let poll_runtime_events () : unit =
       ignore (Runtime_events.read_poll c cbs None)
   | None -> ()
 
-(* Total live memory in OCaml words (8 bytes each on 64-bit).
+(* Total live memory in OCaml words.
    Includes both small objects (pool) and large allocations. *)
 let heap_usage_words () : int = !pool_live_words + !large_words
 
 (* Total live memory in megabytes. *)
 let heap_usage_mb () : float =
-  Float.of_int (heap_usage_words ()) *. 8.0 /. (1024.0 *. 1024.0)
+  Float.of_int (heap_usage_words ()) *. Float.of_int Sys.word_size /. (1024.0 *. 1024.0)
 
 (* Cleanup at program end *)
 let shutdown_runtime_events () : unit =
