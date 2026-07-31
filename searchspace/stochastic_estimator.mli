@@ -48,6 +48,8 @@ val memory_aware_selector : ?threshold:float -> ?memfree:(unit -> float) -> unit
 type gradual_braking_stats = {
   total_calls : int;
   (** Total number of times the selector has been invoked. *)
+  last_words : int;
+  (** Heap usage in words at the time of the last stats read. *)
   undersampled_count : int;
   (** Number of times undersampled_selector was used. *)
   greedy_count : int;

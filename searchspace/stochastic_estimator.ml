@@ -1978,6 +1978,7 @@ end
 (** Statistics tracking which strategy was used by the gradual braking selector. *)
 type gradual_braking_stats = {
   total_calls : int;
+  last_words: int;
   undersampled_count : int;
   greedy_count : int;
 }
@@ -1999,12 +2000,18 @@ let gradual_braking_selector ?(threshold_mb = 8000.0)
   let total_calls = ref 0 in
   let undersampled_count = ref 0 in
   let greedy_count = ref 0 in
+  let last_words = ref 0 in
   let t_words = int_of_float (threshold_mb *. 1024.0 *. 1024.0 /. Float.of_int Sys.word_size) in
   let selector (node : 'a node) : int =
     incr total_calls;
     let c = !total_calls in
     let u_words = heap_usage_words () in
-    if u_words + (c mod t_words) < t_words then (
+    last_words := u_words;
+    (* Multiply by large prime to make C mod T jump chaotically across 0..T-1.
+       This gives probability (T-U)/T of undersampling, providing smooth linear
+       decay from 100% to 0% as U goes 0..T. Deterministic but non-sequential. *)
+    let c' = (c * 1099511628211) mod t_words in
+    if u_words + c' < t_words then (
       incr undersampled_count;
       undersampled_selector node
     ) else (
@@ -2015,6 +2022,7 @@ let gradual_braking_selector ?(threshold_mb = 8000.0)
   let get_stats () : gradual_braking_stats = 
     let r = {
     total_calls = !total_calls;
+    last_words = !last_words;
     undersampled_count = !undersampled_count;
     greedy_count = !greedy_count;
     } in begin
@@ -2057,10 +2065,10 @@ let%expect_test "selector: linear decay across U/T ratios" = begin
     U/T | total | undersampled | greedy | %undersampled
     ----+-------+--------------+--------+-------------
     0/ 100 |   822 |          822 |      0 | 100.0%
-    25/ 100 |   811 |          611 |    200 | 75.3%
-    50/ 100 |   805 |          405 |    400 | 50.3%
-    75/ 100 |   813 |          213 |    600 | 26.2%
-    100/ 100 |   904 |            0 |    904 | 0.0%
+    25/ 100 |   800 |          600 |    200 | 75.0%
+    50/ 100 |   816 |          408 |    408 | 50.0%
+    75/ 100 |   847 |          212 |    635 | 25.0%
+    100/ 100 |  1000 |            0 |   1000 | 0.0%
     |}]
 end
 

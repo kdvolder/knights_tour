@@ -64,8 +64,12 @@ let poll_runtime_events () : unit =
   | None -> ()
 
 (* Total live memory in OCaml words.
-   Includes both small objects (pool) and large allocations. *)
-let heap_usage_words () : int = !pool_live_words + !large_words
+   Includes both small objects (pool) and large allocations.
+   Calls poll_runtime_events internally to ensure fresh counters,
+   since the ring buffer may have been updated by GCs between polls. *)
+let heap_usage_words () : int =
+  poll_runtime_events ();
+  !pool_live_words + !large_words
 
 (* Total live memory in megabytes. *)
 let heap_usage_mb () : float =
