@@ -54,8 +54,8 @@ let () =
   (* let selector = Stochastic_estimator.probabilistic_undersampled_selector in *)
   let estimator = Stochastic_estimator.create ~on_solution ~selector searchspace in
   
-  Printf.printf "%-5s | %-7s | %-12s | %-12s | %-8s | %-6s | %-12s | %-10s | %-10s | %-8s | %-10s | %s\n%!" "Batch" "Samples" "Nodes Est" "Fails Est" "Sols Est" "Found" "Materialized" "%Complete" "Pruned" "Mem.Mb" "Elapsed" "ETA";
-  Printf.printf "----- | ------- | ------------ | ------------ | -------- | ------ | ------------ | ---------- | ---------- | -------- | ---------- | ------------------\n%!";
+  Printf.printf "%-5s | %-7s | %-12s | %-12s | %-8s | %-6s | %-12s | %-10s | %-10s | %-11s | %-8s | %-12s | %s\n%!" "Batch" "Samples" "Nodes Est" "Fails Est" "Sols Est" "Found" "Materialized" "Pruned" "Net Nodes" "%Complete" "Mem.Mb" "Elapsed" "ETA";
+  Printf.printf "----- | ------- | ------------ | ------------ | -------- | ------ | ------------ | ---------- | ---------- | ----------- | -------- | ------------ | ------------------\n%!";
   
   let batch_count = ref 0 in
   let total_samples = ref 0 in
@@ -63,14 +63,17 @@ let () =
     incr batch_count;
     total_samples := !total_samples + batch_size;
     let est = Stochastic_estimator.estimates estimator in
+    Searchspace.poll_runtime_events ();
     let free_pct = Searchspace.heap_usage_mb () in
-    Printf.printf "%-5d | %-7d | %12s | %12s | %-8s | %-6d | %-12d | %10.2e%% | %-10d | %-8.1f | %-10s | %s\n%!"
+    let net_nodes = p.materialized_nodes - p.pruned_nodes in
+    Printf.printf "%-5d | %-7d | %12s | %12s | %-8s | %-6d | %12d | %10d | %10d | %10.2e%% | %-8.1f | %-12s | %-10s\n%!"
       !batch_count !total_samples
       (format_number est.nodes) (format_number est.fails) (format_number est.solutions)
       !found_count
       p.materialized_nodes
-      p.progress_percent
       p.pruned_nodes
+      net_nodes
+      p.progress_percent
       free_pct
       (Stochastic_estimator.format_time p.elapsed_seconds)
       (Stochastic_estimator.format_time p.estimated_remaining_seconds)
