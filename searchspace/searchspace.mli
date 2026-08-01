@@ -176,13 +176,3 @@ val inspect : 'a t -> 'a node_view
 (** [memfree ()] returns the fraction of free memory (0.0 to 1.0).
     Reads from /proc/meminfo and is cached for performance. *)
 val memfree : unit -> float
-
-(** Runtime events-based memory measurement.
-    Initialize once at startup with [init_runtime_events].
-    Call [poll_runtime_events] before reading usage.
-    Returns heap usage in MB (pool_live + large_alloc words * 8 bytes). *)
-val init_runtime_events : unit -> bool
-val poll_runtime_events : unit -> unit
-val heap_usage_words : unit -> int
-(** Returns total live memory in OCaml words (pool_live + large_alloc). *)
-val heap_usage_mb : unit -> float

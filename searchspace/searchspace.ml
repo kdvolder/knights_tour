@@ -340,17 +340,3 @@ let rec inspect (space : 'a t) : 'a node_view =
       | _ -> Fork choices_list
       end
   | Lazy f -> inspect (f ())
-
-
-(** Runtime events-based memory measurement *)
-let init_runtime_events () =
-  Runtime_events_mem.init_runtime_events ()
-
-and poll_runtime_events () =
-  Runtime_events_mem.poll_runtime_events ()
-
-and heap_usage_words () =
-  Runtime_events_mem.heap_usage_words ()
-
-and heap_usage_mb () =
-  Runtime_events_mem.heap_usage_mb ()
