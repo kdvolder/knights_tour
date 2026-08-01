@@ -48,8 +48,8 @@ let () =
   (* let selector = Stochastic_estimator.probabilistic_undersampled_selector in *)
   let estimator = Stochastic_estimator.create ~on_solution ~selector searchspace in
   
-  Printf.printf "%-5s | %-7s | %-12s | %-12s | %-8s | %-6s | %-12s | %-10s | %-10s | %-6s | %-12s | %s\n%!" "Batch" "Samples" "Nodes Est" "Fails Est" "Sols Est" "Found" "Materialized" "Pruned" "Net Nodes" "%Under" "Elapsed" "ETA";
-  Printf.printf "----- | ------- | ------------ | ------------ | -------- | ------ | ------------ | ---------- | ---------- | ------ | ------------ | ------------------\n%!";
+  Printf.printf "%-5s | %-7s | %-12s | %-12s | %-8s | %-6s | %-12s | %-10s | %-10s | %5s | %-6s | %-12s | %s\n%!" "Batch" "Samples" "Nodes Est" "Fails Est" "Sols Est" "Found" "Materialized" "Pruned" "Net Nodes" "%Under" "%Done" "Elapsed" "ETA";
+  Printf.printf "----- | ------- | ------------ | ------------ | -------- | ------ | ------------ | ---------- | ---------- | ----- | ------ | ------------ | ------------------\n%!";
   
   let batch_count = ref 0 in
   let total_samples = ref 0 in
@@ -63,7 +63,7 @@ let () =
     let undersampled_pct =
       if batch_total > 0 then Float.of_int stats.undersampled_count /. Float.of_int batch_total *. 100.0
       else 0.0 in
-    Printf.printf "%-5d | %-7d | %12s | %12s | %-8s | %-6d | %12d | %10d | %10d | %5.1f%% | %-12s | %-10s\n%!"
+    Printf.printf "%-5d | %-7d | %12s | %12s | %-8s | %-6d | %12d | %10d | %10d | %5.1f%% | %-6.1f | %-12s | %-10s\n%!"
       !batch_count !total_samples
       (format_number est.nodes) (format_number est.fails) (format_number est.solutions)
       !found_count
@@ -71,6 +71,7 @@ let () =
       p.pruned_nodes
       net_nodes
       undersampled_pct
+      p.progress_percent
       (Stochastic_progress.format_time p.elapsed_seconds)
       (Stochastic_progress.format_time p.estimated_remaining_seconds)
   ) estimator;
