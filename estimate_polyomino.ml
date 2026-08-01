@@ -19,14 +19,16 @@ let init_runtime_events () =
     flush stderr
   end
 
-let solutions_file_extension () =
+let solutions_file_path puzzle_file =
   let today = Unix.localtime (Unix.time ()) in
   let day = today.tm_mday in
-  let month = today.tm_mon+1 in
+  let month = today.tm_mon + 1 in
   let year = today.tm_year + 1900 in
   let hour = today.tm_hour in
   let min = today.tm_min in
-  (Printf.sprintf "%04d-%02d-%02d-%02d-%02d.sol" year month day hour min)
+  let timestamp = Printf.sprintf "%04d-%02d-%02d-%02d-%02d" year month day hour min in
+  let dir = Filename.dirname puzzle_file in
+  Filename.concat dir (Printf.sprintf "solutions-%s.txt" timestamp)
   
 
 let () =
@@ -35,7 +37,7 @@ let () =
     exit 1
   end;
   let puzzle_file = Sys.argv.(1) in
-  let solutions_file = (String.replace_last ~sub:".txt" ~by:"" puzzle_file) ^ "-" ^ (solutions_file_extension ()) in
+  let solutions_file = solutions_file_path puzzle_file in
   let out_ch = open_out solutions_file in
   let found_count = ref 0 in
   let on_solution solution =
