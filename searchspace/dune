@@ -4,7 +4,7 @@
   (libraries collections unix)
   (inline_tests)
   (preprocess (pps ppx_inline_test ppx_expect))
-  (modules searchspace stochastic_progress stochastic_estimator memfree)
+  (modules searchspace table_logger stochastic_progress stochastic_estimator memfree)
   (private_modules memfree)
   (wrapped false)
 )
