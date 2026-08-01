@@ -1,6 +1,25 @@
 open Searchspace
 open Collections.Util
 
+type 'a node = {
+	 node_view : 'a Searchspace.node_view;           (* Cached inspected view of the searchspace *)
+	 mutable isCompleted : bool;										 (* Indicates if the node has been fully explored *)
+	 mutable children : 'a node option array;        (* Children indexed by decision number; only some may be materialized *)
+	 mutable samples : int;                          (* Number of samples passing through this node *)
+	 mutable nodes_estimate : float;                 (* Current best estimate for subtree size *)
+   mutable fail_estimate : float;                  (* Final estimate for failures in this subtree *)
+	 mutable solution_estimate : float;              (* Final estimate for solutions in this subtree *)
+	 mutable materialized_nodes : int;               (* Number of materialized nodes in this subtree *)
+	 mutable pruned_nodes : int;                     (* Number of nodes freed when this node was pruned *)
+}
+
+type 'a child_selector = 'a t -> 'a node -> int
+and  'a t = {
+	root : 'a node;
+	selector : 'a child_selector;
+	on_solution : 'a -> unit;
+}
+
 type decision = {
     chosen: int;
     choices: int
@@ -170,18 +189,6 @@ let sums_div7 =
 	if sum mod 7 = 0 then return (Printf.sprintf "%d + %d = %d" n1 n2 sum)
 	else empty
 
-type 'a node = {
-	 node_view : 'a Searchspace.node_view;           (* Cached inspected view of the searchspace *)
-	 mutable isCompleted : bool;										 (* Indicates if the node has been fully explored *)
-	 mutable children : 'a node option array;        (* Children indexed by decision number; only some may be materialized *)
-	 mutable samples : int;                          (* Number of samples passing through this node *)
-	 mutable nodes_estimate : float;                 (* Current best estimate for subtree size *)
-   mutable fail_estimate : float;                  (* Final estimate for failures in this subtree *)
-	 mutable solution_estimate : float;              (* Final estimate for solutions in this subtree *)
-	 mutable materialized_nodes : int;               (* Number of materialized nodes in this subtree *)
-	 mutable pruned_nodes : int;                     (* Number of nodes freed when this node was pruned *)
-}
-
 let child_average (children : 'a node option array) (f : 'a node -> float) :
 	float =
 	let materialized = Array.to_list children |> List.filter_map (fun c -> c) in
@@ -214,16 +221,14 @@ let create_node (space : 'a Searchspace.t) : 'a node =
 			pruned_nodes = 0;
 		}
 
-type 'a child_selector = 'a node -> int
-
-let uniform_selector node =
+let uniform_selector _ node =
 	Random.int (Array.length node.children)
 
 let sample_rate = function
 	| Some child -> float_of_int child.samples /. (child.fail_estimate +. child.solution_estimate)
 	| None -> 0.0
 
-let undersampled_selector (node : 'a node) : int =
+let undersampled_selector (_:'a t) (node : 'a node) : int =
 	let n = Array.length node.children in
 	if n = 0 then 0
 	else
@@ -234,7 +239,7 @@ let undersampled_selector (node : 'a node) : int =
 
 
 (* Select child with probability proportional to estimated unsampled leaves *)
-let probabilistic_undersampled_selector (node : 'a node) : int =
+let probabilistic_undersampled_selector _ (node : 'a node) : int =
   let n = Array.length node.children in
   if n = 0 then 0
   else
@@ -272,7 +277,7 @@ let greedy_rate child = match child with
 
 (** Select child with least remaining unmaterialized work.
     Drives branches to completion faster, enabling pruning and memory reclamation. *)
-let greedy_completion_selector (node : 'a node) : int =
+let greedy_completion_selector _ (node : 'a node) : int =
   let n = Array.length node.children in
   if n = 0 then 0
   else
@@ -330,6 +335,7 @@ type estimates = {
 	fails : float;
 	solutions : float;
 	materialized_nodes : int;
+  pruned_nodes : int;
 }
 
 type leaf_type = Fail | Solution
@@ -344,16 +350,32 @@ type materialized_stats = {
 	avg_leaf_depth_solution : float;
 }
 
+let rec balanced_range start stop =
+	if start > stop then
+		empty
+	else if start = stop then
+		return start
+	else if start + 1 = stop then
+		return start ++ return stop
+	else
+		let mid = (start + stop) / 2 in
+		balanced_range start mid ++ balanced_range (mid + 1) stop
+
+let create ?(selector=undersampled_selector) ?(on_solution=(fun _ -> ())) (space : 'a Searchspace.t) : 'a t =
+	{ root = create_node space; selector; on_solution }
+
 let estimate ?(selector=undersampled_selector) n_trials (space : 'a Searchspace.t) : estimates =
-	let root = create_node space in
+  let est = create ~selector space in
+  let root = est.root in
 	for _ = 1 to n_trials do
-		ignore (walk selector (fun _ -> ()) root)
+		ignore (walk (selector est) (fun _ -> ()) root)
 	done;
 	{
 		nodes = root.nodes_estimate;
 		fails = root.fail_estimate;
 		solutions = root.solution_estimate;
 		materialized_nodes = root.materialized_nodes;
+    pruned_nodes = root.pruned_nodes;
 	}
 
 let%expect_test "estimate number of nodes" =
@@ -381,17 +403,6 @@ let%expect_test "estimate number of nodes" =
      number of fails: 22
      number of solutions: 3
    |}]
-
-let rec balanced_range start stop =
-	if start > stop then
-		empty
-	else if start = stop then
-		return start
-	else if start + 1 = stop then
-		return start ++ return stop
-	else
-		let mid = (start + stop) / 2 in
-		balanced_range start mid ++ balanced_range (mid + 1) stop
 
 let%expect_test "undersampling larger balanced searchspace" =
 	let int_range = balanced_range in
@@ -460,7 +471,6 @@ let%expect_test "undersampling larger balanced searchspace" =
      number of solutions: 1198
    |}]
 
-
 let%expect_test "undersampling larger unbalanced searchspace" =
 	let right_heavy_space = (
 		let* n1 = int_range 1 100 in
@@ -527,21 +537,11 @@ let%expect_test "undersampling larger unbalanced searchspace" =
      number of solutions: 722
    |}]
 
-(** Incremental estimator API implementation *)
-type 'a t = {
-	root : 'a node;
-	selector : 'a child_selector;
-	on_solution : 'a -> unit;
-}
-
-let create ?(selector=undersampled_selector) ?(on_solution=(fun _ -> ())) (space : 'a Searchspace.t) : 'a t =
-	{ root = create_node space; selector; on_solution }
-
 let sample n (est : 'a t) : bool =
 	let rec loop n =
 		if n <= 0 || est.root.isCompleted then ()
 		else (
-			ignore (walk est.selector est.on_solution est.root);
+			ignore (walk (est.selector est) est.on_solution est.root);
 			loop (n-1)
 		)
 	in loop n; est.root.isCompleted
@@ -552,6 +552,7 @@ let estimates (est : 'a t) : estimates =
 		fails = est.root.fail_estimate;
 		solutions = est.root.solution_estimate;
 		materialized_nodes = est.root.materialized_nodes;
+		pruned_nodes = est.root.pruned_nodes;
 	}
 
 let analyze_materialized (est : 'a t) : materialized_stats =
@@ -1848,10 +1849,10 @@ end
     @param memfree Function that returns the fraction of free memory (default: Searchspace.memfree)
     @param node The fork node to select a child from
     @return Index of the selected child *)
-let memory_aware_selector ?(threshold = 0.8) ?(memfree=memfree) () (node : 'a node) : int =
+let memory_aware_selector ?(threshold = 0.8) ?(memfree=memfree) () est (node : 'a node) : int =
   let free_ratio = memfree () in
-  if 1.0 -. free_ratio > threshold then greedy_completion_selector node
-  else undersampled_selector node
+  if 1.0 -. free_ratio > threshold then greedy_completion_selector est node
+  else undersampled_selector est node
 
 let%expect_test "memory_aware_selector: scenario - switches between undersampled and greedy" = begin
   Random.full_init [|42|];
@@ -1997,16 +1998,16 @@ type gradual_braking_stats = {
     @param threshold Pressure value at which undersampled probability reaches 0% (default 8000.0).
     @param measure Function that returns current pressure value (default: [Searchspace.heap_usage_mb]).
     @return Tuple of (selector function, stats accessor) *)
-let gradual_braking_selector ~threshold
-                             ~measure
-  : ('a node -> int) * (unit -> gradual_braking_stats) =
+let gradual_braking_selector ~threshold ~measure
+  : ('a child_selector * (unit -> gradual_braking_stats)) =
   let total_calls = ref 0 in
   let undersampled_count = ref 0 in
   let greedy_count = ref 0 in
   let last_measure = ref 0.0 in
-  let selector (node : 'a node) : int =
+  (* Ref to current estimator - set by create when selector is stored *)
+  let selector est (node : 'a node) : int =
     incr total_calls;
-    let u = measure () in
+    let u = measure est in
     last_measure := u;
     (* Random float [0,1) compared against U/T ratio gives P(undersampled) = (T-U)/T.
        Clean, unit-agnostic — no floor hacks or float modulo. Same cost as prime mod
@@ -2014,10 +2015,10 @@ let gradual_braking_selector ~threshold
     let ratio = u /. threshold in
     if Random.float 1.0 >= ratio then (
       incr undersampled_count;
-      undersampled_selector node
+      undersampled_selector est node
     ) else (
       incr greedy_count;
-      greedy_completion_selector node
+      greedy_completion_selector est node
     )
   in
   let get_stats () : gradual_braking_stats = 
@@ -2051,9 +2052,9 @@ let%expect_test "selector: linear decay across U/T ratios" = begin
   for i = 0 to 4 do
     let u = Float.of_int ((i * int_of_float t) / 4) in
     let tree = large_tree () in
-    let selector, get_stats = gradual_braking_selector 
+    let (selector, get_stats) = gradual_braking_selector 
       ~threshold:t
-      ~measure:(fun () -> u) in
+      ~measure:(fun _ -> u) in
     let est = create ~selector tree in
     ignore (sample 100 est);
     let s = get_stats () in
@@ -2079,10 +2080,10 @@ let%expect_test "selector: stats are independent per selector" = begin
   let tree_b = large_tree () in
   let sel_a, get_stats_a = gradual_braking_selector 
     ~threshold:t
-    ~measure:(fun () -> 0.0) in
+    ~measure:(fun _ -> 0.0) in
   let sel_b, get_stats_b = gradual_braking_selector 
     ~threshold:t
-    ~measure:(fun () -> t) in
+    ~measure:(fun _ -> t) in
   let est_a = create ~selector:sel_a tree_a in
   let est_b = create ~selector:sel_b tree_b in
   ignore (sample 20 est_a);

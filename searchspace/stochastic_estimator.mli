@@ -1,5 +1,8 @@
 (** Interface for stochastic estimation functions *)
 
+type 'a t
+(** An incremental estimator for a search space. *)
+
 type decision = {
         chosen: int;
         (** A number between [0] inclusive and [choices] exclusive, indicating which choice was made*)
@@ -55,22 +58,22 @@ type gradual_braking_stats = {
 }
 (** Statistics tracking which strategy the gradual braking selector used. *)
 
-val gradual_braking_selector : threshold:float -> measure:(unit -> float) -> ('a child_selector * (unit -> gradual_braking_stats))
+val gradual_braking_selector : threshold:float -> measure:('a t -> float) -> ('a child_selector * (unit -> gradual_braking_stats))
 (** Gradual braking selector that eases off undersampled behavior as a measured value approaches a threshold.
     Uses the formula U + (C mod T) < T to provide linear decay blending from 100% undersampled
     at U=0 to 0% undersampled at U=T. Prevents the "freight train" overshoot problem by starting
     braking immediately rather than waiting for pressure to hit a hard threshold.
     
     The selector is unit-agnostic: [measure] returns any numeric value representing pressure,
-    and [threshold] must be in the same units. This allows plugging in different measurement
-    sources (RSS from /proc, heap words, system memory, etc.) without conversion logic in the selector.
+    and [threshold] must be in the same units. The measure function receives the estimator
+    so it can access any stats (materialized nodes, pruned nodes, heap usage, etc.).
     
-    Returns a tuple of (selector_function, stats_accessor). The stats accessor provides
-    cumulative counts of which strategy was used across all calls.
+    Returns a function that takes an estimator and returns (selector_function, stats_accessor).
+    The stats accessor provides cumulative counts of which strategy was used across all calls.
     
     @param threshold Pressure value at which undersampled probability reaches 0%.
-    @param measure Function that returns current pressure value.
-    @return Tuple of (selector function, stats accessor) *)
+    @param measure Function that receives the estimator and returns current pressure value.
+    @return Function from estimator to (selector function, stats accessor) *)
 
 type estimates = {
     nodes : float;
@@ -81,6 +84,8 @@ type estimates = {
     (** The estimated number of leaf nodes in the search space that represent solutions. *)
     materialized_nodes : int;
     (** The number of nodes that were actually materialized during the estimation process. *)
+    pruned_nodes : int;
+    (** The number of nodes that were pruned (freed) during the estimation process. *)
 }
 
 val estimate : ?selector:'a child_selector -> int -> 'a Searchspace.t -> estimates
@@ -111,9 +116,6 @@ val calculate_true_values : 'a Searchspace.t -> stats
     This function is useful for validating the accuracy of estimates produced
     by the [estimate] function. It should only be used on small search spaces
     where a full exploration is feasible. *)
-
-type 'a t
-(** An incremental estimator for a search space. *)
 
 val create : ?selector:'a child_selector -> ?on_solution:('a -> unit) -> 'a Searchspace.t -> 'a t
 (** [create ?selector ?on_solution searchspace] creates a new incremental estimator for the given search space, optionally using a custom selector and an optional callback to receive solutions as they are found. The default callback does nothing. *)
