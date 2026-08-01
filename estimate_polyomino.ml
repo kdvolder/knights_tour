@@ -65,7 +65,7 @@ let () =
   
   let batch_count = ref 0 in
   let total_samples = ref 0 in
-  Stochastic_estimator.run_with_progress ~batch_size ~on_progress:(fun p ->
+  Stochastic_progress.run_with_progress ~batch_size ~on_progress:(fun p ->
     incr batch_count;
     total_samples := !total_samples + batch_size;
     let est = Stochastic_estimator.estimates estimator in
@@ -86,8 +86,8 @@ let () =
       net_nodes
       undersampled_pct
       free_pct
-      (Stochastic_estimator.format_time p.elapsed_seconds)
-      (Stochastic_estimator.format_time p.estimated_remaining_seconds)
+      (Stochastic_progress.format_time p.elapsed_seconds)
+      (Stochastic_progress.format_time p.estimated_remaining_seconds)
   ) estimator;
   
   (* Final report *)

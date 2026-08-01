@@ -4,7 +4,7 @@
   (libraries collections unix runtime_events)
   (inline_tests)
   (preprocess (pps ppx_inline_test ppx_expect))
-  (modules searchspace stochastic_estimator memfree runtime_events_mem)
+  (modules searchspace stochastic_progress stochastic_estimator memfree runtime_events_mem)
   (private_modules memfree)
   (wrapped false)
 )

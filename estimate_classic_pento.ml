@@ -39,11 +39,11 @@ let () =
     pentomino_space in
     
   let batch_size = 5000 in
-  Stochastic_estimator.run_with_progress ~batch_size ~on_progress:(fun p ->
+  Stochastic_progress.run_with_progress ~batch_size ~on_progress:(fun p ->
     let current_estimates = Stochastic_estimator.estimates est in
     let stats = Stochastic_estimator.analyze_materialized est in
     
-    Printf.printf "[%.1f%%] ETA: %s\n" p.progress_percent (Stochastic_estimator.format_time p.estimated_remaining_seconds);
+    Printf.printf "[%.1f%%] ETA: %s\n" p.progress_percent (Stochastic_progress.format_time p.estimated_remaining_seconds);
     Printf.printf "=== BATCH ===\n";
     Printf.printf "Estimates: nodes=%.0f, fails=%.1f, solutions=%.1f\n" 
       current_estimates.nodes current_estimates.fails current_estimates.solutions;
