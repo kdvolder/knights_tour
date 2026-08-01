@@ -129,9 +129,6 @@ val sample : int -> 'a t -> bool
 val estimates : 'a t -> estimates
 (** [estimates est] returns the current estimates from the estimator. *)
 
-val get_pruned_nodes : 'a t -> int
-(** [get_pruned_nodes est] returns the number of pruned nodes. Used by progress monitoring. *)
-
 val is_completed : 'a t -> bool
 (** [is_completed est] returns true if the search space has been fully explored. *)
 

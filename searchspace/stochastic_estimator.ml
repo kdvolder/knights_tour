@@ -555,7 +555,6 @@ let estimates (est : 'a t) : estimates =
 		pruned_nodes = est.root.pruned_nodes;
 	}
 
-let get_pruned_nodes (est : 'a t) : int = est.root.pruned_nodes
 let is_completed (est : 'a t) : bool = est.root.isCompleted
 
 let analyze_materialized (est : 'a t) : materialized_stats =
