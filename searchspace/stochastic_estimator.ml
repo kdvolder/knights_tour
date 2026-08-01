@@ -1215,7 +1215,6 @@ let%expect_test "oversampling is fine" = begin
     |}]
 end
 
-
 let%expect_test "greedy_completion_selector: step-by-step inspection" = begin
   let num = of_list [1;2;3] in
   let simple_space =
