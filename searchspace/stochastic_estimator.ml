@@ -1845,16 +1845,14 @@ end
     samples across branches. When memory is tight (above threshold), switches to
     greedy_completion_selector to focus on completing branches, enabling pruning.
     
-    @param threshold Memory usage threshold (default 0.8 = 80%). Above this, switches to greedy.
-    @param memfree Function that returns the fraction of free memory (default: Searchspace.memfree)
-    @param node The fork node to select a child from
-    @return Index of the selected child *)
-let memory_aware_selector ?(threshold = 0.8) ?(memfree=memfree) () est (node : 'a node) : int =
-  let free_ratio = memfree () in
-  if 1.0 -. free_ratio > threshold then greedy_completion_selector est node
+    @param threshold Memory usage threshold. Above this, switches to greedy.
+    @param memfree Function that returns the fraction of free memory.
+    @return Selector function (estimator -> node -> int) *)
+let hard_braking_memory_aware_selector ~threshold ~memory_pressure est (node : 'a node) : int =
+  if memory_pressure est > threshold then greedy_completion_selector est node
   else undersampled_selector est node
 
-let%expect_test "memory_aware_selector: scenario - switches between undersampled and greedy" = begin
+let%expect_test "hard_braking_memory_aware_selector: scenario - switches between undersampled and greedy" = begin
   Random.full_init [|42|];
   
   (* Create a tree with 3 children, each leading to a deeper subtree *)
@@ -1866,32 +1864,18 @@ let%expect_test "memory_aware_selector: scenario - switches between undersampled
     ]
   ) in
   
-  (* Mock memfree: calculate memory pressure from materialized nodes *)
-  let max_memory = ref 10 in
-  let memory_used = ref 0 in
-  let mock_memfree () : float =
-    (* free_ratio decreases as memory_used increases *)
-    let used = Float.of_int !memory_used in
-    let max_m = Float.of_int !max_memory in
-    if used >= max_m then 0.0 else 1.0 -. (used /. max_m)
-  in
+  (* Mock memory_pressure: return net materialized nodes as pressure *)
+  let mock_memory_pressure est = Float.of_int (est.root.materialized_nodes - est.root.pruned_nodes) in
   
-  (* Create estimator with memory_aware_selector, threshold at 50% usage *)
-  let selector = memory_aware_selector ~threshold:0.5 ~memfree:mock_memfree () in
+  (* Create estimator with hard_braking_memory_aware_selector, threshold at 5 net nodes *)
+  let selector = hard_braking_memory_aware_selector ~threshold:5.0 ~memory_pressure:mock_memory_pressure in
   let est = create ~selector tree in
-  
-  (* Helper to update mock memory from actual tree state *)
-  let update_memory () =
-    memory_used := est.root.materialized_nodes - est.root.pruned_nodes
-  in
   
   (* Helper to print current mode *)
   let print_mode () =
-    update_memory ();
-    let free_ratio = mock_memfree () in
-    let usage = 1.0 -. free_ratio in
-    if usage > 0.5 then Printf.printf "Mode: GREEDY (usage=%.0f%%)\n" (usage *. 100.0)
-    else Printf.printf "Mode: UNDERSAMPLED (usage=%.0f%%)\n" (usage *. 100.0)
+    let pressure = mock_memory_pressure est in
+    if pressure > 5.0 then Printf.printf "Mode: GREEDY (net_nodes=%.0f)\n" pressure
+    else Printf.printf "Mode: UNDERSAMPLED (net_nodes=%.0f)\n" pressure
   in
   
   Printf.printf "=== Initial state ===\n";
@@ -1920,54 +1904,54 @@ let%expect_test "memory_aware_selector: scenario - switches between undersampled
   
   [%expect{|
     === Initial state ===
-    Mode: UNDERSAMPLED (usage=10%)
+    Mode: UNDERSAMPLED (net_nodes=1)
     Root: samples=0 materialized=1 pruned=0
 
     === After sample 1 ===
-    Mode: UNDERSAMPLED (usage=30%)
+    Mode: UNDERSAMPLED (net_nodes=3)
     Root: samples=1 materialized=3 pruned=0
       Child 0: not materialized
       Child 1: samples=1 completed=false materialized=2
       Child 2: not materialized
 
     === After sample 2 ===
-    Mode: UNDERSAMPLED (usage=50%)
+    Mode: UNDERSAMPLED (net_nodes=5)
     Root: samples=2 materialized=5 pruned=0
       Child 0: not materialized
       Child 1: samples=1 completed=false materialized=2
       Child 2: samples=1 completed=false materialized=2
 
     === After sample 3 ===
-    Mode: GREEDY (usage=70%)
+    Mode: GREEDY (net_nodes=7)
     Root: samples=3 materialized=7 pruned=0
       Child 0: samples=1 completed=false materialized=2
       Child 1: samples=1 completed=false materialized=2
       Child 2: samples=1 completed=false materialized=2
 
     === After sample 4 ===
-    Mode: GREEDY (usage=60%)
+    Mode: GREEDY (net_nodes=6)
     Root: samples=4 materialized=8 pruned=2
       Child 0: samples=1 completed=false materialized=2
       Child 1: samples=2 completed=true materialized=3
       Child 2: samples=1 completed=false materialized=2
 
     === After sample 5 ===
-    Mode: UNDERSAMPLED (usage=50%)
+    Mode: UNDERSAMPLED (net_nodes=5)
     Root: samples=5 materialized=9 pruned=4
       Child 0: samples=2 completed=true materialized=3
       Child 1: samples=2 completed=true materialized=3
       Child 2: samples=1 completed=false materialized=2
 
     === After sample 6 ===
-    Mode: UNDERSAMPLED (usage=10%)
+    Mode: UNDERSAMPLED (net_nodes=1)
     Root: samples=6 materialized=10 pruned=9
 
     === After sample 7 ===
-    Mode: UNDERSAMPLED (usage=10%)
+    Mode: UNDERSAMPLED (net_nodes=1)
     Root: samples=6 materialized=10 pruned=9
 
     === After sample 8 ===
-    Mode: UNDERSAMPLED (usage=10%)
+    Mode: UNDERSAMPLED (net_nodes=1)
     Root: samples=6 materialized=10 pruned=9
     |}]
 end
@@ -1988,7 +1972,7 @@ type gradual_braking_stats = {
     at U=0 to 0% undersampled at U=T. Prevents the "freight train" overshoot problem by starting
     braking immediately rather than waiting for pressure to hit a hard threshold.
     
-    The selector is unit-agnostic: [measure] returns any numeric value representing pressure,
+    The selector is unit-agnostic: [memory_pressure] returns any numeric value representing pressure,
     and [threshold] must be in the same units. This allows plugging in different measurement
     sources (RSS from /proc, heap words, system memory, etc.) without conversion logic in the selector.
     
@@ -1996,9 +1980,9 @@ type gradual_braking_stats = {
     cumulative counts of which strategy was used across all calls.
     
     @param threshold Pressure value at which undersampled probability reaches 0% (default 8000.0).
-    @param measure Function that returns current pressure value (default: [Searchspace.heap_usage_mb]).
+    @param memory_pressure Function that receives the estimator and returns current pressure value.
     @return Tuple of (selector function, stats accessor) *)
-let gradual_braking_selector ~threshold ~measure
+let gradual_braking_memory_aware_selector ~threshold ~memory_pressure
   : ('a child_selector * (unit -> gradual_braking_stats)) =
   let total_calls = ref 0 in
   let undersampled_count = ref 0 in
@@ -2007,7 +1991,7 @@ let gradual_braking_selector ~threshold ~measure
   (* Ref to current estimator - set by create when selector is stored *)
   let selector est (node : 'a node) : int =
     incr total_calls;
-    let u = measure est in
+    let u = memory_pressure est in
     last_measure := u;
     (* Random float [0,1) compared against U/T ratio gives P(undersampled) = (T-U)/T.
        Clean, unit-agnostic — no floor hacks or float modulo. Same cost as prime mod
@@ -2052,9 +2036,9 @@ let%expect_test "selector: linear decay across U/T ratios" = begin
   for i = 0 to 4 do
     let u = Float.of_int ((i * int_of_float t) / 4) in
     let tree = large_tree () in
-    let (selector, get_stats) = gradual_braking_selector 
+    let (selector, get_stats) = gradual_braking_memory_aware_selector 
       ~threshold:t
-      ~measure:(fun _ -> u) in
+      ~memory_pressure:(fun _ -> u) in
     let est = create ~selector tree in
     ignore (sample 100 est);
     let s = get_stats () in
@@ -2078,12 +2062,12 @@ let%expect_test "selector: stats are independent per selector" = begin
   let t = 10.0 in
   let tree_a = large_tree () in
   let tree_b = large_tree () in
-  let sel_a, get_stats_a = gradual_braking_selector 
+  let sel_a, get_stats_a = gradual_braking_memory_aware_selector 
     ~threshold:t
-    ~measure:(fun _ -> 0.0) in
-  let sel_b, get_stats_b = gradual_braking_selector 
+    ~memory_pressure:(fun _ -> 0.0) in
+  let sel_b, get_stats_b = gradual_braking_memory_aware_selector 
     ~threshold:t
-    ~measure:(fun _ -> t) in
+    ~memory_pressure:(fun _ -> t) in
   let est_a = create ~selector:sel_a tree_a in
   let est_b = create ~selector:sel_b tree_b in
   ignore (sample 20 est_a);
