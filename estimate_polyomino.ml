@@ -55,7 +55,7 @@ let () =
     In_channel.with_open_text puzzle_file Puzzle.load
   in
   let searchspace = Puzzle.solve puzzle in
-  let (selector, get_stats) = Stochastic_estimator.gradual_braking_memory_aware_selector ~threshold:10000. ~memory_pressure:nodes_in_memory in
+  let (selector, get_stats) = Stochastic_estimator.gradual_braking_memory_aware_selector ~threshold:1000. ~memory_pressure:nodes_in_memory in
   (*let selector = Stochastic_estimator.hard_braking_memory_aware_selector ~threshold:0.3 ~memory_pressure:(fun _ -> Searchspace.heap_usage_mb ()) in*)
   (* let selector = Stochastic_estimator.probabilistic_undersampled_selector in *)
   let estimator = Stochastic_estimator.create ~on_solution ~selector searchspace in
