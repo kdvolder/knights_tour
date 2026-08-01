@@ -1978,40 +1978,41 @@ end
 (** Statistics tracking which strategy was used by the gradual braking selector. *)
 type gradual_braking_stats = {
   total_calls : int;
-  last_words: int;
   undersampled_count : int;
   greedy_count : int;
 }
 
-(** Gradual braking selector that eases off undersampled behavior as heap usage approaches a threshold.
+(** Gradual braking selector that eases off undersampled behavior as a measured value approaches a threshold.
     Uses the formula U + (C mod T) < T to provide linear decay blending from 100% undersampled
     at U=0 to 0% undersampled at U=T. Prevents the "freight train" overshoot problem by starting
-    braking immediately rather than waiting for memory pressure to hit a hard threshold.
+    braking immediately rather than waiting for pressure to hit a hard threshold.
+    
+    The selector is unit-agnostic: [measure] returns any numeric value representing pressure,
+    and [threshold] must be in the same units. This allows plugging in different measurement
+    sources (RSS from /proc, heap words, system memory, etc.) without conversion logic in the selector.
     
     Returns a tuple of (selector_function, stats_accessor). The stats accessor provides
     cumulative counts of which strategy was used across all calls.
     
-    @param threshold_mb Memory usage threshold in MB (default 8000 = 8GB). Above this, undersampled probability reaches 0%.
-    @param heap_usage_words Function that returns current OCaml heap usage in words (default: [Searchspace.heap_usage_words])
+    @param threshold Pressure value at which undersampled probability reaches 0% (default 8000.0).
+    @param measure Function that returns current pressure value (default: [Searchspace.heap_usage_mb]).
     @return Tuple of (selector function, stats accessor) *)
-let gradual_braking_selector ?(threshold_mb = 8000.0) 
-                             ?(heap_usage_words=Searchspace.heap_usage_words)
-  () : ('a node -> int) * (unit -> gradual_braking_stats) =
+let gradual_braking_selector ~threshold
+                             ~measure
+  : ('a node -> int) * (unit -> gradual_braking_stats) =
   let total_calls = ref 0 in
   let undersampled_count = ref 0 in
   let greedy_count = ref 0 in
-  let last_words = ref 0 in
-  let t_words = int_of_float (threshold_mb *. 1024.0 *. 1024.0 /. Float.of_int Sys.word_size) in
+  let last_measure = ref 0.0 in
   let selector (node : 'a node) : int =
     incr total_calls;
-    let c = !total_calls in
-    let u_words = heap_usage_words () in
-    last_words := u_words;
-    (* Multiply by large prime to make C mod T jump chaotically across 0..T-1.
-       This gives probability (T-U)/T of undersampling, providing smooth linear
-       decay from 100% to 0% as U goes 0..T. Deterministic but non-sequential. *)
-    let c' = (c * 1099511628211) mod t_words in
-    if u_words + c' < t_words then (
+    let u = measure () in
+    last_measure := u;
+    (* Random float [0,1) compared against U/T ratio gives P(undersampled) = (T-U)/T.
+       Clean, unit-agnostic — no floor hacks or float modulo. Same cost as prime mod
+       (just a division), but avoids all the int<->float conversion mess. *)
+    let ratio = u /. threshold in
+    if Random.float 1.0 >= ratio then (
       incr undersampled_count;
       undersampled_selector node
     ) else (
@@ -2021,10 +2022,9 @@ let gradual_braking_selector ?(threshold_mb = 8000.0)
   in
   let get_stats () : gradual_braking_stats = 
     let r = {
-    total_calls = !total_calls;
-    last_words = !last_words;
-    undersampled_count = !undersampled_count;
-    greedy_count = !greedy_count;
+      total_calls = !total_calls;
+      undersampled_count = !undersampled_count;
+      greedy_count = !greedy_count;
     } in begin
       undersampled_count := 0; greedy_count := 0;
       r
@@ -2045,44 +2045,44 @@ let large_tree () : (int * int * int) Searchspace.t =
 
 let%expect_test "selector: linear decay across U/T ratios" = begin
   Random.full_init [|42|];
-  let t_words = 100 in
+  let t = 100.0 in
   Printf.printf "U/T | total | undersampled | greedy | %%undersampled\n";
   Printf.printf "----+-------+--------------+--------+-------------\n";
   for i = 0 to 4 do
-    let u_words = (i * t_words) / 4 in
+    let u = Float.of_int ((i * int_of_float t) / 4) in
     let tree = large_tree () in
     let selector, get_stats = gradual_braking_selector 
-      ~threshold_mb:(Float.of_int (t_words * Sys.word_size) /. 1024.0 /. 1024.0)
-      ~heap_usage_words:(fun () -> u_words) () in
+      ~threshold:t
+      ~measure:(fun () -> u) in
     let est = create ~selector tree in
     ignore (sample 100 est);
     let s = get_stats () in
     let pct = Float.of_int s.undersampled_count /. Float.of_int s.total_calls *. 100.0 in
-    Printf.printf "%d/%4d | %5d | %12d | %6d | %.1f%%\n" 
-      u_words t_words s.total_calls s.undersampled_count s.greedy_count pct
+    Printf.printf "%3.0f/%4d | %5d | %12d | %6d | %.1f%%\n" 
+      u (int_of_float t) s.total_calls s.undersampled_count s.greedy_count pct
   done;
   [%expect{|
     U/T | total | undersampled | greedy | %undersampled
     ----+-------+--------------+--------+-------------
-    0/ 100 |   822 |          822 |      0 | 100.0%
-    25/ 100 |   800 |          600 |    200 | 75.0%
-    50/ 100 |   816 |          408 |    408 | 50.0%
-    75/ 100 |   847 |          212 |    635 | 25.0%
-    100/ 100 |  1000 |            0 |   1000 | 0.0%
+      0/ 100 |   820 |          820 |      0 | 100.0%
+     25/ 100 |   807 |          610 |    197 | 75.6%
+     50/ 100 |   806 |          385 |    421 | 47.8%
+     75/ 100 |   832 |          212 |    620 | 25.5%
+    100/ 100 |   919 |            0 |    919 | 0.0%
     |}]
 end
 
 let%expect_test "selector: stats are independent per selector" = begin
   Random.full_init [|42|];
-  let t_words = 10 in
+  let t = 10.0 in
   let tree_a = large_tree () in
   let tree_b = large_tree () in
   let sel_a, get_stats_a = gradual_braking_selector 
-    ~threshold_mb:(Float.of_int (t_words * Sys.word_size) /. 1024.0 /. 1024.0)
-    ~heap_usage_words:(fun () -> 0) () in
+    ~threshold:t
+    ~measure:(fun () -> 0.0) in
   let sel_b, get_stats_b = gradual_braking_selector 
-    ~threshold_mb:(Float.of_int (t_words * Sys.word_size) /. 1024.0 /. 1024.0)
-    ~heap_usage_words:(fun () -> t_words) () in
+    ~threshold:t
+    ~measure:(fun () -> t) in
   let est_a = create ~selector:sel_a tree_a in
   let est_b = create ~selector:sel_b tree_b in
   ignore (sample 20 est_a);
@@ -2094,7 +2094,7 @@ let%expect_test "selector: stats are independent per selector" = begin
   Printf.printf "B: total=%d undersampled=%d greedy=%d\n" 
     sb.total_calls sb.undersampled_count sb.greedy_count;
   [%expect{|
-    A: total=129 undersampled=129 greedy=0
-    B: total=150 undersampled=0 greedy=150
+    A: total=128 undersampled=128 greedy=0
+    B: total=149 undersampled=0 greedy=149
     |}]
 end

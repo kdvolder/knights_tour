@@ -48,8 +48,6 @@ val memory_aware_selector : ?threshold:float -> ?memfree:(unit -> float) -> unit
 type gradual_braking_stats = {
   total_calls : int;
   (** Total number of times the selector has been invoked. *)
-  last_words : int;
-  (** Heap usage in words at the time of the last stats read. *)
   undersampled_count : int;
   (** Number of times undersampled_selector was used. *)
   greedy_count : int;
@@ -57,17 +55,21 @@ type gradual_braking_stats = {
 }
 (** Statistics tracking which strategy the gradual braking selector used. *)
 
-val gradual_braking_selector : ?threshold_mb:float -> ?heap_usage_words:(unit -> int) -> unit -> ('a child_selector * (unit -> gradual_braking_stats))
-(** Gradual braking selector that eases off undersampled behavior as heap usage approaches a threshold.
+val gradual_braking_selector : threshold:float -> measure:(unit -> float) -> ('a child_selector * (unit -> gradual_braking_stats))
+(** Gradual braking selector that eases off undersampled behavior as a measured value approaches a threshold.
     Uses the formula U + (C mod T) < T to provide linear decay blending from 100% undersampled
     at U=0 to 0% undersampled at U=T. Prevents the "freight train" overshoot problem by starting
-    braking immediately rather than waiting for memory pressure to hit a hard threshold.
+    braking immediately rather than waiting for pressure to hit a hard threshold.
+    
+    The selector is unit-agnostic: [measure] returns any numeric value representing pressure,
+    and [threshold] must be in the same units. This allows plugging in different measurement
+    sources (RSS from /proc, heap words, system memory, etc.) without conversion logic in the selector.
     
     Returns a tuple of (selector_function, stats_accessor). The stats accessor provides
     cumulative counts of which strategy was used across all calls.
     
-    @param threshold_mb Memory usage threshold in MB (default 8000 = 8GB). Above this, undersampled probability reaches 0%.
-    @param heap_usage_words Function that returns current OCaml heap usage in words (default: [Searchspace.heap_usage_words])
+    @param threshold Pressure value at which undersampled probability reaches 0%.
+    @param measure Function that returns current pressure value.
     @return Tuple of (selector function, stats accessor) *)
 
 type estimates = {
