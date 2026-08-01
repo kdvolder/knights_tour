@@ -23,3 +23,10 @@ val print_header : 'a t -> unit
 
 (** [print_row cols row] prints a single data row, auto-aligned. *)
 val print_row : 'a t -> 'a -> unit
+
+(** Standard formatter functions. Each takes a width and returns a function
+    that formats the value into a string of that width. *)
+val format_int : int -> int -> string
+val format_float : int -> float -> string
+val format_string_left : int -> string -> string
+val format_string_right : int -> string -> string

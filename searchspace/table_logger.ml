@@ -50,3 +50,10 @@ let print_row (cols : 'a t) (row : 'a) =
   in
   print_cells reversed;
   Printf.printf "\n%!"
+
+(** Standard formatter functions. Each takes a width and returns a function
+    that formats the value into a string of that width. *)
+let format_int w v = Printf.sprintf "%*d" w v
+let format_float w v = Printf.sprintf "%*s" w (Printf.sprintf "%.1f%%" v)
+let format_string_left w s = Printf.sprintf "%-*s" w s
+let format_string_right w s = Printf.sprintf "%*s" w s
