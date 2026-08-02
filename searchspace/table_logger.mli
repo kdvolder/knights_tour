@@ -29,3 +29,7 @@ val format_float : int -> float -> string
 val format_percent : int -> float -> string
 val format_string_left : int -> string -> string
 val format_string_right : int -> string -> string
+(** [format_time w seconds] formats a duration in seconds as a human-readable
+    string (e.g. "2 h 30 min"). Truncates with ellipsis when width is too
+    small. *)
+val format_time : int -> float -> string

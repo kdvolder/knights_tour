@@ -129,6 +129,53 @@ let format_string_right w s =
   else if w <= 1 then ellipsis
   else take_graphemes s (w - 1) ^ ellipsis
 
+let format_time w seconds =
+  let rec fmt (secs : float) : string =
+    if secs < 0. then "-" ^ fmt (-.secs)
+    else
+      let max_int = float_of_int (max_int / 2) in (* ~68 years *)
+      if secs > max_int then Printf.sprintf "%.5g years" (secs /. 31536000.)
+      else
+        let total = int_of_float secs in
+      if total < 60 then string_of_int total ^ " s"
+      else if total < 3600 then
+        let m = total / 60 in
+        let s = total mod 60 in
+        if s = 0 then string_of_int m ^ " min"
+        else string_of_int m ^ " min " ^ string_of_int s ^ " s"
+      else if total < 86400 then
+        let h = total / 3600 in
+        let rem = total mod 3600 in
+        if rem = 0 then string_of_int h ^ " h"
+        else
+          let m = rem / 60 in
+          let s = rem mod 60 in
+          if m = 0 then string_of_int h ^ " h " ^ string_of_int s ^ " s"
+          else if s = 0 then string_of_int h ^ " h " ^ string_of_int m ^ " min"
+          else string_of_int h ^ " h " ^ string_of_int m ^ " min " ^ string_of_int s ^ " s"
+      else if total < 31536000 then
+        let d = total / 86400 in
+        let rem = total mod 86400 in
+        if rem = 0 then string_of_int d ^ " day" ^ (if d > 1 then "s" else "")
+        else
+          let h = rem / 3600 in
+          let m = (rem mod 3600) / 60 in
+          let s = rem mod 60 in
+          if h = 0 && m = 0 then string_of_int d ^ " day" ^ (if d > 1 then "s" else "")
+          else if s = 0 && m = 0 then string_of_int d ^ " day" ^ (if d > 1 then "s" else "") ^ ", " ^ string_of_int h ^ " h"
+          else if m = 0 then string_of_int d ^ " day" ^ (if d > 1 then "s" else "") ^ ", " ^ string_of_int h ^ " h " ^ string_of_int s ^ " s"
+          else if s = 0 then string_of_int d ^ " day" ^ (if d > 1 then "s" else "") ^ ", " ^ string_of_int h ^ " h " ^ string_of_int m ^ " min"
+          else string_of_int d ^ " day" ^ (if d > 1 then "s" else "") ^ ", " ^ string_of_int h ^ " h " ^ string_of_int m ^ " min " ^ string_of_int s ^ " s"
+      else
+        let years = float_of_int (total / 31536000) in
+        if years > 1e9 then Printf.sprintf "%.5g years" years
+        else string_of_int (int_of_float years) ^ " year" ^ (if int_of_float years > 1 then "s" else "")
+  in
+  let raw = fmt seconds in
+  if grapheme_len raw <= w then String.make (w - grapheme_len raw) ' ' ^ raw
+  else if w <= 1 then ellipsis
+  else take_graphemes raw (w - 1) ^ ellipsis
+
 let%expect_test "simple header with 3 columns" =
   let table =
     add_column ~label:"Hello" ~extract_and_format:format_string_right []
@@ -401,3 +448,75 @@ let%expect_test "format_percent adapts to width" =
     width 2: |…%|
     width 1: |…|
     |}]
+
+let%expect_test "format_time: seconds" =
+  Printf.printf "%s\n" (format_time 10 0.0);
+  Printf.printf "%s\n" (format_time 10 5.0);
+  Printf.printf "%s\n" (format_time 10 42.0);
+  [%expect{|
+     0 s
+     5 s
+    42 s
+    |}]
+
+let%expect_test "format_time: minutes and seconds" =
+  Printf.printf "%s\n" (format_time 10 59.0);
+  Printf.printf "%s\n" (format_time 10 60.0);
+  Printf.printf "%s\n" (format_time 10 142.0);
+  [%expect{|
+          59 s
+         1 min
+    2 min 22 s
+    |}]
+
+let%expect_test "format_time: hours" =
+  Printf.printf "%s\n" (format_time 10 3600.0);
+  Printf.printf "%s\n" (format_time 15 7530.0);
+  [%expect{|
+          1 h
+    2 h 5 min 30 s
+    |}]
+
+let%expect_test "format_time: days" =
+  Printf.printf "%s\n" (format_time 15 86400.0);
+  Printf.printf "%s\n" (format_time 25 150125.0);
+  [%expect{|
+           1 day
+    1 day, 17 h 42 min 5 s
+    |}]
+
+let%expect_test "format_time: years" =
+  Printf.printf "%s\n" (format_time 10 31536000.0);
+  Printf.printf "%s\n" (format_time 25 1e30);
+  [%expect{|
+    1 year
+          3.171e+22 years
+    |}]
+
+let%expect_test "format_time: width truncation" =
+  for i = 15 downto 1 do
+    Printf.printf "width %d: |%s|\n" i (format_time i 150125.0)
+  done;
+  [%expect{|
+    width 15: |1 day, 17 h 42…|
+    width 14: |1 day, 17 h 4…|
+    width 13: |1 day, 17 h …|
+    width 12: |1 day, 17 h…|
+    width 11: |1 day, 17 …|
+    width 10: |1 day, 17…|
+    width 9: |1 day, 1…|
+    width 8: |1 day, …|
+    width 7: |1 day,…|
+    width 6: |1 day…|
+    width 5: |1 da…|
+    width 4: |1 d…|
+    width 3: |1 …|
+    width 2: |1…|
+    width 1: |…|
+    |}]
+
+let%expect_test "format_time: negative" =
+  Printf.printf "%s\n" (format_time 10 (-42.0));
+  [%expect{|
+    -42 s
+  |}]

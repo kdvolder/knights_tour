@@ -14,8 +14,8 @@ type progress_row = {
   net_nodes : int;
   undersampled_pct : float;
   progress_pct : float;
-  elapsed : string;
-  eta : string;
+  elapsed_seconds : float;
+  eta_seconds : float;
 }
 
 let solutions_file_path puzzle_file =
@@ -36,17 +36,17 @@ let nodes_in_memory est =
 let make_table () =
   Table_logger.add_column ~label:"Batch" ~extract_and_format:(fun w r -> Table_logger.format_int w r.batch) []
   |> Table_logger.add_column ~label:"Samples" ~extract_and_format:(fun w r -> Table_logger.format_int w r.total_samples)
-  |> Table_logger.add_column ~label:"Nodes Est" ~extract_and_format:(fun w r -> Table_logger.format_float w r.nodes_est)
-  |> Table_logger.add_column ~label:"Fails Est" ~extract_and_format:(fun w r -> Table_logger.format_float w r.fails_est)
-  |> Table_logger.add_column ~label:"Sols Est" ~extract_and_format:(fun w r -> Table_logger.format_float w r.sols_est)
-  |> Table_logger.add_column ~label:"Found" ~extract_and_format:(fun w r -> Table_logger.format_int w r.found)
+  |> Table_logger.add_column ~width:12 ~label:"Nodes Est" ~extract_and_format:(fun w r -> Table_logger.format_float w r.nodes_est)
+  |> Table_logger.add_column ~width:12 ~label:"Fails Est" ~extract_and_format:(fun w r -> Table_logger.format_float w r.fails_est)
+  |> Table_logger.add_column ~width:12 ~label:"Sols Est" ~extract_and_format:(fun w r -> Table_logger.format_float w r.sols_est)
+  |> Table_logger.add_column ~width:8 ~label:"Found" ~extract_and_format:(fun w r -> Table_logger.format_int w r.found)
   |> Table_logger.add_column ~label:"Materialized" ~extract_and_format:(fun w r -> Table_logger.format_int w r.materialized)
   |> Table_logger.add_column ~label:"Pruned" ~extract_and_format:(fun w r -> Table_logger.format_int w r.pruned)
   |> Table_logger.add_column ~label:"Net Nodes" ~extract_and_format:(fun w r -> Table_logger.format_int w r.net_nodes)
   |> Table_logger.add_column ~label:"%Under" ~extract_and_format:(fun w r -> Table_logger.format_percent w r.undersampled_pct)
   |> Table_logger.add_column ~label:"%Done" ~extract_and_format:(fun w r -> Table_logger.format_percent w r.progress_pct)
-  |> Table_logger.add_column ~label:"Elapsed" ~extract_and_format:(fun w r -> Table_logger.format_string_right w r.elapsed)
-  |> Table_logger.add_column ~label:"ETA" ~extract_and_format:(fun w r -> Table_logger.format_string_right w r.eta)
+  |> Table_logger.add_column ~width:15 ~label:"Elapsed" ~extract_and_format:(fun w r -> Table_logger.format_time w r.elapsed_seconds)
+  |> Table_logger.add_column ~width:20 ~label:"ETA" ~extract_and_format:(fun w r -> Table_logger.format_time w r.eta_seconds)
 
 let () =
   if Array.length Sys.argv <> 2 then begin
@@ -98,8 +98,8 @@ let () =
       net_nodes;
       undersampled_pct;
       progress_pct = p.progress_percent;
-      elapsed = Stochastic_progress.format_time p.elapsed_seconds;
-      eta = Stochastic_progress.format_time p.estimated_remaining_seconds;
+      elapsed_seconds = p.elapsed_seconds;
+      eta_seconds = p.estimated_remaining_seconds;
     } in
     Table_logger.print_row table row
   ) estimator;
