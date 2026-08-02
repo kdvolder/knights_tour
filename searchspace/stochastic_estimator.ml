@@ -1370,7 +1370,7 @@ let rec collect_entries (node : 'a node) (path : decision_path) : node_entry Seq
         match child_opt with
         | Some child -> Some (collect_entries child (path @ [{chosen=i; choices=num_choices}]))
         | None -> None
-      ) |> Seq.concat_map (fun x -> x)
+      ) |> Seq.concat
   )
 
 let decision_to_string d = string_of_int d.chosen ^ "/" ^ string_of_int d.choices
@@ -1448,45 +1448,38 @@ let replay_path (root : 'a node) (path : decision_path) : 'a node =
 
 (* Load state from file and reconstruct estimator *)
 let load_state (space : 'a Searchspace.t) (filename : string) : 'a t =
-  let lines = ref [] in
   let ic = open_in filename in
-  (try
-    while true do
-      lines := input_line ic :: !lines
-    done
-  with End_of_file -> close_in ic);
-  let lines = List.rev !lines in
-  match lines with
-  | [] -> failwith "Invalid file format: empty file"
-  | first_line :: rest ->
+  (* Read version header *)
+  let first_line = try Some (input_line ic) with End_of_file -> None in
+  match first_line with
+  | None -> close_in ic; failwith "Invalid file format: empty file"
+  | Some first_line ->
       let version_parts = String.split_on_char ' ' first_line in
       match version_parts with
       | ["version"; "1"] ->
-          (* Parse all node entries *)
-          let parsed_entries = List.map parse_line rest in
-          
           (* Create root node *)
           let root = create_node space in
           
-          (* Sort entries by path depth (shallow first) *)
-          let sorted_entries = List.sort (fun a b -> compare (List.length a.path) (List.length b.path)) parsed_entries in
-          
-          (* Apply each entry to the tree, linking nodes as we go *)
-          List.iter (fun entry ->
+          (* Stream entries one at a time — file is already in DFS pre-order, so parents come before children *)
+          let rec loop () = try
+            let line = input_line ic in
+            let entry = parse_line line in
             let target_node = replay_path root entry.path in
-            (* Set statistics on the node *)
             target_node.samples <- entry.samples;
             target_node.nodes_estimate <- entry.nodes_estimate;
             target_node.fail_estimate <- entry.fail_estimate;
             target_node.solution_estimate <- entry.solution_estimate;
             target_node.materialized_nodes <- entry.materialized_nodes_count;
             target_node.pruned_nodes <- entry.pruned_nodes;
-            target_node.isCompleted <- entry.is_completed
-          ) sorted_entries;
+            target_node.isCompleted <- entry.is_completed;
+            loop ()
+          with End_of_file -> close_in ic
+          in
+          loop ();
           
           { root; selector = undersampled_selector; on_solution = (fun _ -> ()) }
-      | ["version"; v] -> failwith ("Unsupported version: " ^ v)
-      | _ -> failwith "Invalid file format: expected 'version N' as first line"
+      | ["version"; v] -> close_in ic; failwith ("Unsupported version: " ^ v)
+      | _ -> close_in ic; failwith "Invalid file format: expected 'version N' as first line"
 
 (** ============================================================================
     POINT ON THE HORIZON: Round-trip serialization test
