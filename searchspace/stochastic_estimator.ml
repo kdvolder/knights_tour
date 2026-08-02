@@ -1494,40 +1494,42 @@ let load_state (space : 'a Searchspace.t) (filename : string) : 'a t =
     This is the proof that serialization/deserialization works correctly.
     ============================================================================ **)
 
+let show_stats est =
+  let stats = estimates est in
+  Printf.sprintf "nodes=%.0f fails=%.0f sols=%.0f mat=%d pru=%d completed=%b" 
+    stats.nodes stats.fails stats.solutions stats.materialized_nodes stats.pruned_nodes (is_completed est)   
+
 let%expect_test "roundtrip: serialize/deserialize/resume produces same result as single run" = begin
-  (* Non-trivial search space: pick two numbers 1..5, keep if sum > 5 *)
+  (* Larger search space so partial sampling leaves an incomplete tree *)
   let num = Searchspace.of_list [1;2;3;4;5] in
   let space =
     num |=> (fun x ->
-      num |=> (fun y ->
-        return (x + y)
+      int_range 1 x |=> (fun y ->
+        return (x, y)
       )
-    ) |?> (fun sum -> sum > 5)
-  in
+    ) in
 
   (* Run A: sample to completion in one shot *)
   let est_a = create space in
   ignore (sample 1000 est_a);
-  let results_a = estimates est_a in
-  Printf.printf "Run A (single shot): nodes=%.0f fails=%.0f sols=%.0f mat=%d completed=%b\n"
-    results_a.nodes results_a.fails results_a.solutions
-    results_a.materialized_nodes (is_completed est_a);
+  Printf.printf "Run A (single shot): %s\n" (show_stats est_a);
 
   (* Run B: sample partway, serialize to file, deserialize, resume *)
   let est_b = create space in
-  ignore (sample 50 est_b);
+  ignore (sample 5 est_b);
+  Printf.printf "Run B partial:       %s\n" (show_stats est_b);
   save_state "test_save.sexp" est_b;
   let est_b_resumed = load_state space "test_save.sexp" in
+  Printf.printf "Run B after load:    %s\n" (show_stats est_b_resumed);
   ignore (sample 1000 est_b_resumed);
-  let results_b = estimates est_b_resumed in
-  Printf.printf "Run B (roundtrip):   nodes=%.0f fails=%.0f sols=%.0f mat=%d completed=%b\n"
-    results_b.nodes results_b.fails results_b.solutions
-    results_b.materialized_nodes (is_completed est_b_resumed);
+  Printf.printf "Run B (roundtrip):   %s\n" (show_stats est_b_resumed);
 
   (* Both should match — same estimates, same completion state *)
   [%expect{|
-    Run A (single shot): nodes=31 fails=10 sols=15 mat=31 completed=true
-    Run B (roundtrip):   nodes=31 fails=10 sols=15 mat=31 completed=true
+    Run A (single shot): nodes=36 fails=5 sols=15 mat=36 pru=35 completed=true
+    Run B partial:       nodes=36 fails=8 sols=12 mat=15 pru=0 completed=false
+    Run B after load:    nodes=36 fails=8 sols=12 mat=15 pru=0 completed=false
+    Run B (roundtrip):   nodes=36 fails=5 sols=15 mat=36 pru=35 completed=true
     |}]
 end
 
