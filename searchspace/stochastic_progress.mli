@@ -16,11 +16,6 @@ val make_progress : float -> 'a Stochastic_estimator.t -> progress
 (** [make_progress start_time est] creates a progress record from the elapsed time since [start_time]
     and the current state of the estimator. *)
 
-val format_time : float -> string
-(** [format_time seconds] formats a duration in seconds into human-readable form.
-    For small values: "1 day, 2 h 30 min 5 s"
-    For large values (>1 billion years): "3.17e22 years" *)
-
 val default_progress_printer : progress -> unit
 (** Default stdout printer for progress reports. Shows completion %, materialized nodes, and ETA. *)
 
