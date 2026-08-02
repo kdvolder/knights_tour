@@ -129,47 +129,51 @@ let format_string_right w s =
   else if w <= 1 then ellipsis
   else take_graphemes s (w - 1) ^ ellipsis
 
+let kalpa_seconds = 1.36328832e+17 (* 4.32 billion years *)
+
 let format_time w seconds =
   let rec fmt (secs : float) : string =
     if secs < 0. then "-" ^ fmt (-.secs)
     else
-      let max_int = float_of_int (max_int / 2) in (* ~68 years *)
-      if secs > max_int then Printf.sprintf "%.5g years" (secs /. 31536000.)
+      if secs >= kalpa_seconds then format_float (w - 7) (secs /. kalpa_seconds) ^ " kalpas"
       else
+        let max_int = float_of_int (max_int / 2) in (* ~68 years *)
+        if secs > max_int then format_float (w - 6) (secs /. 31536000.) ^ " years"
+        else
         let total = int_of_float secs in
-      if total < 60 then string_of_int total ^ " s"
-      else if total < 3600 then
-        let m = total / 60 in
-        let s = total mod 60 in
-        if s = 0 then string_of_int m ^ " min"
-        else string_of_int m ^ " min " ^ string_of_int s ^ " s"
-      else if total < 86400 then
-        let h = total / 3600 in
-        let rem = total mod 3600 in
-        if rem = 0 then string_of_int h ^ " h"
+        if total < 60 then string_of_int total ^ " s"
+        else if total < 3600 then
+          let m = total / 60 in
+          let s = total mod 60 in
+          if s = 0 then string_of_int m ^ " min"
+          else string_of_int m ^ " min " ^ string_of_int s ^ " s"
+        else if total < 86400 then
+          let h = total / 3600 in
+          let rem = total mod 3600 in
+          if rem = 0 then string_of_int h ^ " h"
+          else
+            let m = rem / 60 in
+            let s = rem mod 60 in
+            if m = 0 then string_of_int h ^ " h " ^ string_of_int s ^ " s"
+            else if s = 0 then string_of_int h ^ " h " ^ string_of_int m ^ " min"
+            else string_of_int h ^ " h " ^ string_of_int m ^ " min " ^ string_of_int s ^ " s"
+        else if total < 31536000 then
+          let d = total / 86400 in
+          let rem = total mod 86400 in
+          if rem = 0 then string_of_int d ^ " day" ^ (if d > 1 then "s" else "")
+          else
+            let h = rem / 3600 in
+            let m = (rem mod 3600) / 60 in
+            let s = rem mod 60 in
+            if h = 0 && m = 0 then string_of_int d ^ " day" ^ (if d > 1 then "s" else "")
+            else if s = 0 && m = 0 then string_of_int d ^ " day" ^ (if d > 1 then "s" else "") ^ ", " ^ string_of_int h ^ " h"
+            else if m = 0 then string_of_int d ^ " day" ^ (if d > 1 then "s" else "") ^ ", " ^ string_of_int h ^ " h " ^ string_of_int s ^ " s"
+            else if s = 0 then string_of_int d ^ " day" ^ (if d > 1 then "s" else "") ^ ", " ^ string_of_int h ^ " h " ^ string_of_int m ^ " min"
+            else string_of_int d ^ " day" ^ (if d > 1 then "s" else "") ^ ", " ^ string_of_int h ^ " h " ^ string_of_int m ^ " min " ^ string_of_int s ^ " s"
         else
-          let m = rem / 60 in
-          let s = rem mod 60 in
-          if m = 0 then string_of_int h ^ " h " ^ string_of_int s ^ " s"
-          else if s = 0 then string_of_int h ^ " h " ^ string_of_int m ^ " min"
-          else string_of_int h ^ " h " ^ string_of_int m ^ " min " ^ string_of_int s ^ " s"
-      else if total < 31536000 then
-        let d = total / 86400 in
-        let rem = total mod 86400 in
-        if rem = 0 then string_of_int d ^ " day" ^ (if d > 1 then "s" else "")
-        else
-          let h = rem / 3600 in
-          let m = (rem mod 3600) / 60 in
-          let s = rem mod 60 in
-          if h = 0 && m = 0 then string_of_int d ^ " day" ^ (if d > 1 then "s" else "")
-          else if s = 0 && m = 0 then string_of_int d ^ " day" ^ (if d > 1 then "s" else "") ^ ", " ^ string_of_int h ^ " h"
-          else if m = 0 then string_of_int d ^ " day" ^ (if d > 1 then "s" else "") ^ ", " ^ string_of_int h ^ " h " ^ string_of_int s ^ " s"
-          else if s = 0 then string_of_int d ^ " day" ^ (if d > 1 then "s" else "") ^ ", " ^ string_of_int h ^ " h " ^ string_of_int m ^ " min"
-          else string_of_int d ^ " day" ^ (if d > 1 then "s" else "") ^ ", " ^ string_of_int h ^ " h " ^ string_of_int m ^ " min " ^ string_of_int s ^ " s"
-      else
-        let years = float_of_int (total / 31536000) in
-        if years > 1e9 then Printf.sprintf "%.5g years" years
-        else string_of_int (int_of_float years) ^ " year" ^ (if int_of_float years > 1 then "s" else "")
+          let years = float_of_int (total / 31536000) in
+          if years > 1e9 then Printf.sprintf "%.5g years" years
+          else string_of_int (int_of_float years) ^ " year" ^ (if int_of_float years > 1 then "s" else "")
   in
   let raw = fmt seconds in
   if grapheme_len raw <= w then String.make (w - grapheme_len raw) ' ' ^ raw
@@ -490,7 +494,7 @@ let%expect_test "format_time: years" =
   Printf.printf "25s: |%s|\n" (format_time 25 1e30);
   [%expect{|
     10s: |    1 year|
-    25s: |          3.171e+22 years|
+    25s: |       7.33521e+12 kalpas|
     |}]
 
 let%expect_test "format_time: width truncation" =
@@ -520,3 +524,17 @@ let%expect_test "format_time: negative" =
   [%expect{|
     -42 s
   |}]
+
+let%expect_test "format_time: kalpas" =
+  Printf.printf "1 kalpa (4.32B years): |%s|\n" (format_time 25 kalpa_seconds);
+  Printf.printf "10 kalpas: |%s|\n" (format_time 25 (kalpa_seconds *. 10.));
+  Printf.printf "2.4631e+11 years: |%s|\n" (format_time 25 (2.4631e+11 *. 31536000.));
+  Printf.printf "1.4e+33 years: |%s|\n" (format_time 25 (1.4e+33 *. 31536000.));
+  Printf.printf "1e30 seconds: |%s|\n" (format_time 25 1e30);
+  [%expect{|
+    1 kalpa (4.32B years): |                 1 kalpas|
+    10 kalpas: |                10 kalpas|
+    2.4631e+11 years: |           56.9772 kalpas|
+    1.4e+33 years: |       3.23852e+23 kalpas|
+    1e30 seconds: |       7.33521e+12 kalpas|
+    |}]
