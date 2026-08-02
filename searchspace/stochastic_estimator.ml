@@ -1347,7 +1347,7 @@ and decision_path = decision list
    Path format: "0/3,1/2" means decision 0 of 3, then decision 1 of 2
 *)
 
-let rec collect_entries (node : 'a node) (path : decision_path) : node_entry list =
+let rec collect_entries (node : 'a node) (path : decision_path) : node_entry Seq.t =
   let num_choices = match node.node_view with
     | Fork choices -> List.length choices
     | _ -> 0
@@ -1363,14 +1363,14 @@ let rec collect_entries (node : 'a node) (path : decision_path) : node_entry lis
     pruned_nodes = node.pruned_nodes;
     is_completed = node.isCompleted;
   } in
-  entry :: (
-    if node.isCompleted then [] (* pruned nodes have no children to visit *)
+  Seq.cons entry (
+    if node.isCompleted then Seq.empty (* pruned nodes have no children to visit *)
     else
-      Array.to_list node.children |> List.mapi (fun i child_opt ->
+      Array.to_seqi node.children |> Seq.filter_map (fun (i, child_opt) ->
         match child_opt with
-        | Some child -> collect_entries child (path @ [{chosen=i; choices=num_choices}])
-        | None -> []
-      ) |> List.concat
+        | Some child -> Some (collect_entries child (path @ [{chosen=i; choices=num_choices}]))
+        | None -> None
+      ) |> Seq.concat_map (fun x -> x)
   )
 
 let decision_to_string d = string_of_int d.chosen ^ "/" ^ string_of_int d.choices
@@ -1393,8 +1393,7 @@ let entry_to_line (entry : node_entry) : string =
 let save_state (filename : string) (est : 'a t) =
   let oc = open_out filename in
   Printf.fprintf oc "version 1\n";
-  let entries = collect_entries est.root [] in
-  List.iter (fun entry -> Printf.fprintf oc "%s\n" (entry_to_line entry)) entries;
+  collect_entries est.root [] |> Seq.iter (fun entry -> Printf.fprintf oc "%s\n" (entry_to_line entry));
   close_out oc
 
 (* Parse a decision from string "chosen/choices" *)
