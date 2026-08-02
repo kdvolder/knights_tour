@@ -95,6 +95,18 @@ let format_int w v =
     | Some e_str -> Printf.sprintf "%*s" w e_str
     | None -> chop w (Printf.sprintf "%.0e" (float_of_int v))
   )
+let format_float w v =
+  let rec find_fit prec =
+    if prec < 0 then None
+    else
+      let f_str = Printf.sprintf "%.*g" prec v in
+      if String.length f_str <= w then Some f_str
+      else find_fit (prec - 1)
+  in
+  match find_fit 6 with (* start with 6 significant digits *)
+  | Some f_str -> Printf.sprintf "%*s" w f_str
+  | None -> chop w (Printf.sprintf "%.0g" v)
+
 let format_percent w v = Printf.sprintf "%*s" w (Printf.sprintf "%.1f%%" v)
 let format_string_left w s =
   if grapheme_len s <= w then s ^ String.make (w - grapheme_len s) ' '
@@ -243,3 +255,70 @@ let%expect_test "format_string_right with shrinking width" =
      Width 2=2 |F…|
      Width 1=1 |…|
      |}]
+
+let%expect_test "format_float adapts to width" =
+  List.iter (fun (label, v) ->
+    Printf.printf "Formatting: %s (%.6g)\n" label v;
+    for i = 12 downto 1 do
+      Printf.printf "width %d: |%s|\n" i (format_float i v)
+    done;
+  ) [
+    "normal", 45.6789;
+    "large", 1.23456789e+30;
+    "small", 1.23456789e-30;
+    "negative", -1.23456789e+10;
+  ];
+  [%expect{|
+    Formatting: normal (45.6789)
+    width 12: |     45.6789|
+    width 11: |    45.6789|
+    width 10: |   45.6789|
+    width 9: |  45.6789|
+    width 8: | 45.6789|
+    width 7: |45.6789|
+    width 6: |45.679|
+    width 5: |45.68|
+    width 4: |45.7|
+    width 3: | 46|
+    width 2: |46|
+    width 1: |…|
+    Formatting: large (1.23457e+30)
+    width 12: | 1.23457e+30|
+    width 11: |1.23457e+30|
+    width 10: |1.2346e+30|
+    width 9: |1.235e+30|
+    width 8: |1.23e+30|
+    width 7: |1.2e+30|
+    width 6: | 1e+30|
+    width 5: |1e+30|
+    width 4: |1e+…|
+    width 3: |1e…|
+    width 2: |1…|
+    width 1: |…|
+    Formatting: small (1.23457e-30)
+    width 12: | 1.23457e-30|
+    width 11: |1.23457e-30|
+    width 10: |1.2346e-30|
+    width 9: |1.235e-30|
+    width 8: |1.23e-30|
+    width 7: |1.2e-30|
+    width 6: | 1e-30|
+    width 5: |1e-30|
+    width 4: |1e-…|
+    width 3: |1e…|
+    width 2: |1…|
+    width 1: |…|
+    Formatting: negative (-1.23457e+10)
+    width 12: |-1.23457e+10|
+    width 11: |-1.2346e+10|
+    width 10: |-1.235e+10|
+    width 9: |-1.23e+10|
+    width 8: |-1.2e+10|
+    width 7: | -1e+10|
+    width 6: |-1e+10|
+    width 5: |-1e+…|
+    width 4: |-1e…|
+    width 3: |-1…|
+    width 2: |-…|
+    width 1: |…|
+    |}]
