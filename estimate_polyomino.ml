@@ -39,14 +39,14 @@ let make_table () =
   |> Table_logger.add_column ~width:12 ~label:"Nodes Est" ~extract_and_format:(fun w r -> Table_logger.format_float w r.nodes_est)
   |> Table_logger.add_column ~width:12 ~label:"Fails Est" ~extract_and_format:(fun w r -> Table_logger.format_float w r.fails_est)
   |> Table_logger.add_column ~width:12 ~label:"Sols Est" ~extract_and_format:(fun w r -> Table_logger.format_float w r.sols_est)
-  |> Table_logger.add_column ~width:8 ~label:"Found" ~extract_and_format:(fun w r -> Table_logger.format_int w r.found)
-  |> Table_logger.add_column ~label:"Materialized" ~extract_and_format:(fun w r -> Table_logger.format_int w r.materialized)
-  |> Table_logger.add_column ~label:"Pruned" ~extract_and_format:(fun w r -> Table_logger.format_int w r.pruned)
-  |> Table_logger.add_column ~label:"Net Nodes" ~extract_and_format:(fun w r -> Table_logger.format_int w r.net_nodes)
-  |> Table_logger.add_column ~label:"%Under" ~extract_and_format:(fun w r -> Table_logger.format_percent w r.undersampled_pct)
-  |> Table_logger.add_column ~label:"%Done" ~extract_and_format:(fun w r -> Table_logger.format_percent w r.progress_pct)
-  |> Table_logger.add_column ~width:15 ~label:"Elapsed" ~extract_and_format:(fun w r -> Table_logger.format_time w r.elapsed_seconds)
-  |> Table_logger.add_column ~width:20 ~label:"ETA" ~extract_and_format:(fun w r -> Table_logger.format_time w r.eta_seconds)
+  |> Table_logger.add_column ~width: 8 ~label:"Found" ~extract_and_format:(fun w r -> Table_logger.format_int w r.found)
+  |> Table_logger.add_column ~width: 8 ~label:"Materialized" ~extract_and_format:(fun w r -> Table_logger.format_int w r.materialized)
+  |> Table_logger.add_column ~width: 8 ~label:"Pruned" ~extract_and_format:(fun w r -> Table_logger.format_int w r.pruned)
+  |> Table_logger.add_column ~width: 8 ~label:"Net Nodes" ~extract_and_format:(fun w r -> Table_logger.format_int w r.net_nodes)
+  |> Table_logger.add_column ~width: 8 ~label:"%Under" ~extract_and_format:(fun w r -> Table_logger.format_percent w r.undersampled_pct)
+  |> Table_logger.add_column ~width: 8 ~label:"%Done" ~extract_and_format:(fun w r -> Table_logger.format_percent w r.progress_pct)
+  |> Table_logger.add_column ~width:20 ~label:"Elapsed" ~extract_and_format:(fun w r -> Table_logger.format_time w r.elapsed_seconds)
+  |> Table_logger.add_column ~width:25 ~label:"ETA" ~extract_and_format:(fun w r -> Table_logger.format_time w r.eta_seconds)
 
 let () =
   if Array.length Sys.argv <> 2 then begin

@@ -450,47 +450,47 @@ let%expect_test "format_percent adapts to width" =
     |}]
 
 let%expect_test "format_time: seconds" =
-  Printf.printf "%s\n" (format_time 10 0.0);
-  Printf.printf "%s\n" (format_time 10 5.0);
-  Printf.printf "%s\n" (format_time 10 42.0);
+  Printf.printf "10s: |%s|\n" (format_time 10 0.0);
+  Printf.printf "10s: |%s|\n" (format_time 10 5.0);
+  Printf.printf "10s: |%s|\n" (format_time 10 42.0);
   [%expect{|
-     0 s
-     5 s
-    42 s
+    10s: |       0 s|
+    10s: |       5 s|
+    10s: |      42 s|
     |}]
 
 let%expect_test "format_time: minutes and seconds" =
-  Printf.printf "%s\n" (format_time 10 59.0);
-  Printf.printf "%s\n" (format_time 10 60.0);
-  Printf.printf "%s\n" (format_time 10 142.0);
+  Printf.printf "10s: |%s|\n" (format_time 10 59.0);
+  Printf.printf "10s: |%s|\n" (format_time 10 60.0);
+  Printf.printf "10s: |%s|\n" (format_time 10 142.0);
   [%expect{|
-          59 s
-         1 min
-    2 min 22 s
+    10s: |      59 s|
+    10s: |     1 min|
+    10s: |2 min 22 s|
     |}]
 
 let%expect_test "format_time: hours" =
-  Printf.printf "%s\n" (format_time 10 3600.0);
-  Printf.printf "%s\n" (format_time 15 7530.0);
+  Printf.printf "10s: |%s|\n" (format_time 10 3600.0);
+  Printf.printf "15s: |%s|\n" (format_time 15 7530.0);
   [%expect{|
-          1 h
-    2 h 5 min 30 s
+    10s: |       1 h|
+    15s: | 2 h 5 min 30 s|
     |}]
 
 let%expect_test "format_time: days" =
-  Printf.printf "%s\n" (format_time 15 86400.0);
-  Printf.printf "%s\n" (format_time 25 150125.0);
+  Printf.printf "15s: |%s|\n" (format_time 15 86400.0);
+  Printf.printf "25s: |%s|\n" (format_time 25 150125.0);
   [%expect{|
-           1 day
-    1 day, 17 h 42 min 5 s
+    15s: |          1 day|
+    25s: |   1 day, 17 h 42 min 5 s|
     |}]
 
 let%expect_test "format_time: years" =
-  Printf.printf "%s\n" (format_time 10 31536000.0);
-  Printf.printf "%s\n" (format_time 25 1e30);
+  Printf.printf "10s: |%s|\n" (format_time 10 31536000.0);
+  Printf.printf "25s: |%s|\n" (format_time 25 1e30);
   [%expect{|
-    1 year
-          3.171e+22 years
+    10s: |    1 year|
+    25s: |          3.171e+22 years|
     |}]
 
 let%expect_test "format_time: width truncation" =
