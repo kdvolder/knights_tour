@@ -1322,3 +1322,483 @@ let%expect_test "selector: stats are independent per selector" = begin
     B: total=149 undersampled=0 greedy=149
     |}]
 end
+
+(** ============================================================================
+    State Serialization - Decision Path Encoding
+    ============================================================================ **)
+
+type node_entry = {
+  path : decision_path;
+  num_choices : int;
+  samples : int;
+  nodes_estimate : float;
+  fail_estimate : float;
+  solution_estimate : float;
+  materialized_nodes_count : int;
+  pruned_nodes : int;
+  is_completed : bool;
+}
+
+and decision_path = decision list
+
+(* Simple line-based format for serialization:
+   Line 1: version N
+   Lines 2+: path|num_choices|samples|nodes_estimate|fail_estimate|solution_estimate|materialized_nodes_count|pruned_nodes|is_completed
+   Path format: "0/3,1/2" means decision 0 of 3, then decision 1 of 2
+*)
+
+let rec collect_entries (node : 'a node) (path : decision_path) : node_entry list =
+  let num_choices = match node.node_view with
+    | Fork choices -> List.length choices
+    | _ -> 0
+  in
+  let entry = {
+    path;
+    num_choices;
+    samples = node.samples;
+    nodes_estimate = node.nodes_estimate;
+    fail_estimate = node.fail_estimate;
+    solution_estimate = node.solution_estimate;
+    materialized_nodes_count = node.materialized_nodes;
+    pruned_nodes = node.pruned_nodes;
+    is_completed = node.isCompleted;
+  } in
+  entry :: (
+    if node.isCompleted then [] (* pruned nodes have no children to visit *)
+    else
+      Array.to_list node.children |> List.mapi (fun i child_opt ->
+        match child_opt with
+        | Some child -> collect_entries child (path @ [{chosen=i; choices=num_choices}])
+        | None -> []
+      ) |> List.concat
+  )
+
+let decision_to_string d = string_of_int d.chosen ^ "/" ^ string_of_int d.choices
+
+let path_to_string path = String.concat "," (List.map decision_to_string path)
+
+let entry_to_line (entry : node_entry) : string =
+  String.concat "|" [
+    path_to_string entry.path;
+    string_of_int entry.num_choices;
+    string_of_int entry.samples;
+    string_of_float entry.nodes_estimate;
+    string_of_float entry.fail_estimate;
+    string_of_float entry.solution_estimate;
+    string_of_int entry.materialized_nodes_count;
+    string_of_int entry.pruned_nodes;
+    string_of_bool entry.is_completed;
+  ]
+
+let save_state (filename : string) (est : 'a t) =
+  let oc = open_out filename in
+  Printf.fprintf oc "version 1\n";
+  let entries = collect_entries est.root [] in
+  List.iter (fun entry -> Printf.fprintf oc "%s\n" (entry_to_line entry)) entries;
+  close_out oc
+
+(* Parse a decision from string "chosen/choices" *)
+let parse_decision s =
+  let parts = String.split_on_char '/' s in
+  { chosen = int_of_string (List.hd parts); choices = int_of_string (List.nth parts 1) }
+
+(* Parse a path from string "0/3,1/2" *)
+let parse_path s =
+  if s = "" then []
+  else List.map parse_decision (String.split_on_char ',' s)
+
+(* Parse a line into a node_entry *)
+let parse_line (line : string) : node_entry =
+  let parts = String.split_on_char '|' line in
+  if List.length parts <> 9 then
+    failwith ("Invalid entry format (expected 9 fields, got " ^ string_of_int (List.length parts) ^ ")");
+  {
+    path = parse_path (List.hd parts);
+    num_choices = int_of_string (List.nth parts 1);
+    samples = int_of_string (List.nth parts 2);
+    nodes_estimate = float_of_string (List.nth parts 3);
+    fail_estimate = float_of_string (List.nth parts 4);
+    solution_estimate = float_of_string (List.nth parts 5);
+    materialized_nodes_count = int_of_string (List.nth parts 6);
+    pruned_nodes = int_of_string (List.nth parts 7);
+    is_completed = match List.nth parts 8 with "true" -> true | _ -> false;
+  }
+
+(* Replay a decision path to find/create nodes along the way, linking them in the tree *)
+let replay_path (root : 'a node) (path : decision_path) : 'a node =
+  let rec aux current_node path = match path with
+    | [] -> current_node (* reached target node *)
+    | d :: rest ->
+        let num_choices = match current_node.node_view with
+          | Fork choices -> List.length choices
+          | _ -> 0 (* shouldn't happen if path is valid *)
+        in
+        if d.chosen >= num_choices then
+          failwith ("Invalid decision: chosen=" ^ string_of_int d.chosen ^ " >= choices=" ^ string_of_int num_choices);
+        (* Get or create child at index d.chosen *)
+        let child_node = match current_node.children.(d.chosen) with
+          | Some c -> c
+          | None ->
+              let new_child = create_node (List.nth (match current_node.node_view with Fork c -> c | _ -> []) d.chosen) in
+              current_node.children.(d.chosen) <- Some new_child;
+              new_child
+        in
+        aux child_node rest
+  in
+  aux root path
+
+(* Load state from file and reconstruct estimator *)
+let load_state (space : 'a Searchspace.t) (filename : string) : 'a t =
+  let lines = ref [] in
+  let ic = open_in filename in
+  (try
+    while true do
+      lines := input_line ic :: !lines
+    done
+  with End_of_file -> close_in ic);
+  let lines = List.rev !lines in
+  match lines with
+  | [] -> failwith "Invalid file format: empty file"
+  | first_line :: rest ->
+      let version_parts = String.split_on_char ' ' first_line in
+      match version_parts with
+      | ["version"; "1"] ->
+          (* Parse all node entries *)
+          let parsed_entries = List.map parse_line rest in
+          
+          (* Create root node *)
+          let root = create_node space in
+          
+          (* Sort entries by path depth (shallow first) *)
+          let sorted_entries = List.sort (fun a b -> compare (List.length a.path) (List.length b.path)) parsed_entries in
+          
+          (* Apply each entry to the tree, linking nodes as we go *)
+          List.iter (fun entry ->
+            let target_node = replay_path root entry.path in
+            (* Set statistics on the node *)
+            target_node.samples <- entry.samples;
+            target_node.nodes_estimate <- entry.nodes_estimate;
+            target_node.fail_estimate <- entry.fail_estimate;
+            target_node.solution_estimate <- entry.solution_estimate;
+            target_node.materialized_nodes <- entry.materialized_nodes_count;
+            target_node.pruned_nodes <- entry.pruned_nodes;
+            target_node.isCompleted <- entry.is_completed
+          ) sorted_entries;
+          
+          { root; selector = undersampled_selector; on_solution = (fun _ -> ()) }
+      | ["version"; v] -> failwith ("Unsupported version: " ^ v)
+      | _ -> failwith "Invalid file format: expected 'version N' as first line"
+
+(** ============================================================================
+    POINT ON THE HORIZON: Round-trip serialization test
+    This is the proof that serialization/deserialization works correctly.
+    ============================================================================ **)
+
+let%expect_test "roundtrip: serialize/deserialize/resume produces same result as single run" = begin
+  (* Non-trivial search space: pick two numbers 1..5, keep if sum > 5 *)
+  let num = Searchspace.of_list [1;2;3;4;5] in
+  let space =
+    num |=> (fun x ->
+      num |=> (fun y ->
+        return (x + y)
+      )
+    ) |?> (fun sum -> sum > 5)
+  in
+
+  (* Run A: sample to completion in one shot *)
+  let est_a = create space in
+  ignore (sample 1000 est_a);
+  let results_a = estimates est_a in
+  Printf.printf "Run A (single shot): nodes=%.0f fails=%.0f sols=%.0f mat=%d completed=%b\n"
+    results_a.nodes results_a.fails results_a.solutions
+    results_a.materialized_nodes (is_completed est_a);
+
+  (* Run B: sample partway, serialize to file, deserialize, resume *)
+  let est_b = create space in
+  ignore (sample 50 est_b);
+  save_state "test_save.sexp" est_b;
+  let est_b_resumed = load_state space "test_save.sexp" in
+  ignore (sample 1000 est_b_resumed);
+  let results_b = estimates est_b_resumed in
+  Printf.printf "Run B (roundtrip):   nodes=%.0f fails=%.0f sols=%.0f mat=%d completed=%b\n"
+    results_b.nodes results_b.fails results_b.solutions
+    results_b.materialized_nodes (is_completed est_b_resumed);
+
+  (* Both should match — same estimates, same completion state *)
+  [%expect{|
+    Run A (single shot): nodes=31 fails=10 sols=15 mat=31 completed=true
+    Run B (roundtrip):   nodes=31 fails=10 sols=15 mat=31 completed=true
+    |}]
+end
+
+(** ============================================================================
+    Edge Cases for Serialization/Deserialization
+    ============================================================================ **)
+
+let%expect_test "edge case: single-node tree (no forks)" = begin
+  (* A search space with zero decision points — just a Result *)
+  let space = return 42 in
+
+  (* Sample to completion (instant, since it's a single node) *)
+  let est = create space in
+  ignore (sample 10 est);
+
+  (* Serialize and deserialize *)
+  save_state "/tmp/test_single.sexp" est;
+  let est2 = load_state space "/tmp/test_single.sexp" in
+
+  (* Verify: single node, completed *)
+  let r = estimates est2 in
+  Printf.printf "nodes=%.0f fails=%.0f sols=%.0f mat=%d completed=%b\n"
+    r.nodes r.fails r.solutions r.materialized_nodes (is_completed est2);
+
+  [%expect{|
+    nodes=1 fails=0 sols=1 mat=1 completed=true
+  |}]
+end
+
+let%expect_test "edge case: deep tree (5 levels)" = begin
+  (* Deep nesting: pick from [1..3] at each of 5 levels *)
+  let num = of_list [1;2;3] in
+  let space =
+    num |=> (fun a ->
+      num |=> (fun b ->
+        num |=> (fun c ->
+          num |=> (fun d ->
+            num |=> (fun e ->
+              return (a, b, c, d, e)
+            )
+          )
+        )
+      )
+    ) in
+
+  (* Sample a few times — won't complete the full tree *)
+  let est = create space in
+  ignore (sample 20 est);
+
+  save_state "/tmp/test_deep.sexp" est;
+  let est2 = load_state space "/tmp/test_deep.sexp" in
+
+  (* Verify structure survived *)
+  let r = estimates est2 in
+  Printf.printf "nodes=%.0f fails=%.0f sols=%.0f mat=%d completed=%b\n"
+    r.nodes r.fails r.solutions r.materialized_nodes (is_completed est2);
+
+  [%expect{| nodes=364 fails=0 sols=243 mat=73 completed=false |}]
+end
+
+let%expect_test "edge case: wide tree (many choices at root)" = begin
+  (* Wide branching: pick from [1..20] *)
+  let space = of_list (List.init 20 (fun i -> i + 1)) in
+
+  let est = create space in
+  ignore (sample 50 est);
+
+  save_state "/tmp/test_wide.sexp" est;
+  let est2 = load_state space "/tmp/test_wide.sexp" in
+
+  let r = estimates est2 in
+  Printf.printf "nodes=%.0f fails=%.0f sols=%.0f mat=%d completed=%b\n"
+    r.nodes r.fails r.solutions r.materialized_nodes (is_completed est2);
+
+  [%expect{| nodes=21 fails=0 sols=20 mat=21 completed=true |}]
+end
+
+let%expect_test "edge case: partial tree with unmaterialized children" = begin
+  (* Two-level tree, sample only a few branches so many children are None *)
+  let num = of_list [1;2;3;4;5] in
+  let space =
+    num |=> (fun x ->
+      int_range 1 x |=> (fun y ->
+        return (x, y)
+      )
+    ) in
+
+  let est = create space in
+  (* Sample just a few times — most children will be unmaterialized *)
+  ignore (sample 3 est);
+
+  save_state "/tmp/test_partial.sexp" est;
+  let est2 = load_state space "/tmp/test_partial.sexp" in
+
+  (* After loading, the tree should have the same structure.
+     Sampling more should continue from where we left off. *)
+  ignore (sample 50 est2);
+
+  let r = estimates est2 in
+  Printf.printf "nodes=%.0f fails=%.0f sols=%.0f mat=%d completed=%b\n"
+    r.nodes r.fails r.solutions r.materialized_nodes (is_completed est2);
+
+  [%expect{| nodes=36 fails=5 sols=15 mat=36 completed=true |}]
+end
+
+let%expect_test "edge case: resume after load accumulates samples correctly" = begin
+  (* Verify that sampling before save + sampling after resume = same as continuous *)
+  let num = of_list [1;2;3] in
+  let space =
+    num |=> (fun x ->
+      int_range 1 x |=> (fun y ->
+        return (x, y)
+      )
+    ) in
+
+  (* Continuous run: sample 100 straight through *)
+  let est_cont = create space in
+  ignore (sample 100 est_cont);
+  let r_cont = estimates est_cont in
+
+  (* Split run: sample 30, save, load, sample 70 *)
+  let est_split = create space in
+  ignore (sample 30 est_split);
+  save_state "/tmp/test_resume.sexp" est_split;
+  let est_resumed = load_state space "/tmp/test_resume.sexp" in
+  ignore (sample 70 est_resumed);
+  let r_split = estimates est_resumed in
+
+  Printf.printf "continuous: nodes=%.0f fails=%.0f sols=%.0f mat=%d\n"
+    r_cont.nodes r_cont.fails r_cont.solutions r_cont.materialized_nodes;
+  Printf.printf "split:      nodes=%.0f fails=%.0f sols=%.0f mat=%d\n"
+    r_split.nodes r_split.fails r_split.solutions r_split.materialized_nodes;
+
+  (* Both should be very close — same total samples, same tree *)
+  [%expect{|
+    continuous: nodes=16 fails=3 sols=6 mat=16
+    split:      nodes=16 fails=3 sols=6 mat=16
+    |}]
+end
+
+let%expect_test "edge case: multiple round-trips" = begin
+  (* Save → load → sample → save → load, verify consistency *)
+  let num = of_list [1;2;3] in
+  let space =
+    num |=> (fun x ->
+      int_range 1 x |=> (fun y ->
+        return (x, y)
+      )
+    ) in
+
+  let est = create space in
+  ignore (sample 20 est);
+  save_state "/tmp/test_multi1.sexp" est;
+
+  let est2 = load_state space "/tmp/test_multi1.sexp" in
+  ignore (sample 30 est2);
+  save_state "/tmp/test_multi2.sexp" est2;
+
+  let est3 = load_state space "/tmp/test_multi2.sexp" in
+  ignore (sample 50 est3);
+
+  let r = estimates est3 in
+  Printf.printf "nodes=%.0f fails=%.0f sols=%.0f mat=%d completed=%b\n"
+    r.nodes r.fails r.solutions r.materialized_nodes (is_completed est3);
+
+  [%expect{| nodes=16 fails=3 sols=6 mat=16 completed=true |}]
+end
+
+let%expect_test "edge case: completed tree survives round-trip" = begin
+  (* Sample to full completion, then serialize *)
+  let num = of_list [1;2;3] in
+  let space =
+    num |=> (fun x ->
+      int_range 1 x |=> (fun y ->
+        return (x, y)
+      )
+    ) in
+
+  let est = create space in
+  ignore (sample 1000 est); (* should complete *)
+
+  save_state "/tmp/test_completed.sexp" est;
+  let est2 = load_state space "/tmp/test_completed.sexp" in
+
+  (* Should already be completed, no new sampling needed *)
+  Printf.printf "completed=%b nodes=%.0f fails=%.0f sols=%.0f mat=%d\n"
+    (is_completed est2)
+    (estimates est2).nodes
+    (estimates est2).fails
+    (estimates est2).solutions
+    (estimates est2).materialized_nodes;
+
+  [%expect{| completed=true nodes=16 fails=3 sols=6 mat=16 |}]
+end
+
+let%expect_test "edge case: pruned nodes survive round-trip" = begin
+  (* Pruning happens when subtrees complete. Verify pruned_nodes count survives. *)
+  let num = of_list [1;2;3] in
+  let space =
+    num |=> (fun x ->
+      int_range 1 x |=> (fun y ->
+        return (x, y)
+      )
+    ) in
+
+  let est = create space in
+  ignore (sample 1000 est); (* complete → prune *)
+
+  save_state "/tmp/test_pruned.sexp" est;
+  let est2 = load_state space "/tmp/test_pruned.sexp" in
+
+  let r1 = estimates est in
+  let r2 = estimates est2 in
+  Printf.printf "original: pruned=%d mat=%d\n" r1.pruned_nodes r1.materialized_nodes;
+  Printf.printf "roundtrip: pruned=%d mat=%d\n" r2.pruned_nodes r2.materialized_nodes;
+
+  [%expect{|
+    original: pruned=15 mat=16
+    roundtrip: pruned=15 mat=16
+    |}]
+end
+
+let%expect_test "edge case: empty file should fail" = begin
+  let () =
+    let oc = open_out "/tmp/test_empty.sexp" in
+    close_out oc
+  in
+  let space = return () in
+  try
+    ignore (load_state space "/tmp/test_empty.sexp");
+    Printf.printf "ERROR: should have failed\n"
+  with Failure msg ->
+    Printf.printf "Correctly rejected empty file: %s\n" msg;
+
+  [%expect{|
+    Correctly rejected empty file: Invalid file format: empty file
+  |}]
+end
+
+let%expect_test "edge case: wrong version should fail" = begin
+  let () =
+    let oc = open_out "/tmp/test_badver.sexp" in
+    Printf.fprintf oc "version 2\n";
+    close_out oc
+  in
+  let space = return () in
+  try
+    ignore (load_state space "/tmp/test_badver.sexp");
+    Printf.printf "ERROR: should have failed\n"
+  with Failure msg ->
+    Printf.printf "Correctly rejected bad version: %s\n" msg;
+
+  [%expect{|
+    Correctly rejected bad version: Unsupported version: 2
+  |}]
+end
+
+let%expect_test "edge case: malformed line should fail" = begin
+  let () =
+    let oc = open_out "/tmp/test_badline.sexp" in
+    Printf.fprintf oc "version 1\n";
+    Printf.fprintf oc "this is not a valid entry\n";
+    close_out oc
+  in
+  let num = of_list [1;2] in
+  let space = num |=> (fun x -> return x) in
+  try
+    ignore (load_state space "/tmp/test_badline.sexp");
+    Printf.printf "ERROR: should have failed\n"
+  with Failure msg ->
+    Printf.printf "Correctly rejected malformed line: %s\n" msg;
+
+  [%expect{| Correctly rejected malformed line: Invalid entry format (expected 9 fields, got 1) |}]
+end

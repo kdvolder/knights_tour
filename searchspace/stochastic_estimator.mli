@@ -155,3 +155,11 @@ type materialized_stats = {
 val analyze_materialized : 'a t -> materialized_stats
 (** [analyze_materialized est] inspects the structure of the already-materialized tree.
     This is a read-only operation that does not trigger any new materialization. *)
+
+val save_state : string -> 'a t -> unit
+(** [save_state filename est] serializes the estimator's tree state to a file.
+    The format is line-based with a version header. *)
+
+val load_state : 'a Searchspace.t -> string -> 'a t
+(** [load_state space filename] deserializes an estimator from a file saved by [save_state].
+    The search space must be provided to reconstruct the tree structure. *)
