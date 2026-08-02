@@ -1,48 +1,37 @@
-# Task 4: State Deserialization - Tree Recreation
+# Task 4: State Deserialization - Advanced Features
 
 ## Goal
 
-Implement deserialization of the serialized estimator state, reconstructing the materialized tree so estimation can continue from where it left off.
+Build on the basic serialization/deserialization from Task 3 to add:
+1. **Lazy node view reconstruction** — defer expensive `inspect` calls until sampling reaches a node
+2. **Robust error handling** — malformed input, corrupted paths, version mismatches
+3. **File I/O helpers** — convenient `save_to_file` / `load_from_file` functions
+4. **Validation** — verify reconstructed tree is in a valid state before returning
 
 ## Background
 
-Task 3 defines the serialization format and tests for roundtrip correctness. This task focuses on the **deserialization logic** - taking serialized decision paths and statistics, and rebuilding the internal tree structure.
-
-The key challenge is that we need to:
-1. Parse decision paths and recreate the tree structure
-2. Restore node statistics (samples, estimates)
-3. Ensure the reconstructed tree is in a valid state for continued sampling
+Task 3 implements basic serialization and deserialization with eager node view reconstruction. This task enhances the deserialization path for production use:
+- **Lazy node views** avoid the 3-hour cost of rebuilding all `node_view` structures upfront
+- **Error handling** ensures the system doesn't crash on corrupted or incompatible saved state
+- **File I/O helpers** provide a simple API for the CLI integration (Task 9)
 
 ## Acceptance Criteria
 
-### 4.1 Tree Reconstruction
+### 4.1 Lazy Node View Reconstruction
 
-1. **Reconstructed tree has correct structure**:
-   - All materialized nodes from serialization are present
-   - Unmaterialized children remain as `None` in the array
-   - Parent-child relationships are preserved
+1. **Deserialization does NOT call `inspect` on materialized nodes**:
+   - Children arrays are sized using `num_choices` from the serialized entry
+   - Node views remain as a placeholder (e.g., `Fork [||]` or a special `Uninspected` variant)
+   - Statistics (samples, estimates, is_completed) are still restored from the entry
 
-2. **Node statistics are restored correctly**:
-   - `samples` count matches serialized value
-   - `nodes_estimate`, `fail_estimate`, `solution_estimate` match
-   - `materialized_nodes` count matches
-   - `is_completed` flag is restored
+2. **`inspect` is called lazily during sampling**:
+   - When `walk` reaches a node with an unmaterialized/uninspected view, it calls `inspect`
+   - This is the same behavior as a freshly created estimator — nodes are inspected on first visit
+   - The only difference: statistics and tree structure are already in place
 
-3. **Reconstructed tree is in valid state**:
-   - Root statistics are consistent with children
-   - `is_completed` flags are transitive (parent completed iff all materialated children completed)
-   - Can call `sample` on reconstructed estimator without errors
-
-### 4.2 Continued Sampling
-
-4. **Sampling continues from saved point**:
-   - New samples are added to existing statistics
-   - Previously materialized nodes are not re-materialized
-   - Total samples = saved_samples + new_samples
-
-5. **Completion detection works after resume**:
-   - If estimator was complete when saved, `sample 0` returns true immediately
-   - If estimator was incomplete, sampling continues until completion
+3. **Lazy reconstruction produces identical results**:
+   - Sampling from a lazily-reconstructed estimator produces the same decisions and statistics
+   - As sampling progresses, nodes get inspected one by one — no difference from eager mode
 
 ### 4.3 Error Handling
 
