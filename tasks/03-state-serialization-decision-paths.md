@@ -60,80 +60,61 @@ A decision path `[0/3, 2/3]` means:
    - Deserialized estimator has same estimates as original
    - Deserialized estimator can continue sampling from saved point
 
-## Implementation Process (TDD)
+## Testing Strategy
 
-### Phase 1: Decision Path Tests
+**Top-down, round-trip first.** The workflow is `let%expect_test` with empty `[%expect{||}]`, run `dune test`, inspect output, promote when correct.
 
-```ocaml
-let%test_module "decision_path" = (module struct
-  (* Test: decision path for simple search space *)
-  let test_simple_path () = 
-    (* int_range 1 3 => paths: [0/3], [1/3], [2/3] *)
-    ...
-  
-  (* Test: decision path for nested search space *)
-  let test_nested_path () = 
-    (* int_range 1 2 ++ int_range 1 2 => paths: [0/2, 0/2], etc. *)
-    ...
-  
-  (* Test: replaying decision path recreates correct node *)
-  let test_replay_path () = 
-    (* Given path [1/3, 2/3], verify it leads to n1=2, n2=3 *)
-    ...
-  
-  (* Test: empty path = root node *)
-  let test_empty_path_is_root () = ...
-end)
-```
+### Primary Test: Round-trip (the proof)
 
-### Phase 2: Serialization Tests
+One end-to-end test that creates a tree, samples it, serializes to file, deserializes from file, resumes sampling, and proves the result matches a single-run completion:
 
 ```ocaml
-let%test_module "serialization" = (module struct
-  (* Test: serialize empty estimator *)
-  let test_serialize_empty () = ...
-  
-  (* Test: serialize simple materialized tree *)
-  let test_serialize_simple_tree () = 
-    (* Create estimator, sample once, serialize *)
-    (* Verify output contains expected decision paths and stats *)
-    ...
-  
-  (* Test: serialization format is valid JSON/sexp *)
-  let test_valid_format () = ...
-  
-  (* Test: serialization is deterministic *)
-  let test_deterministic_serialization () = 
-    (* Serialize same state twice, compare *)
-    ...
-end)
+let%expect_test "roundtrip: serialize/deserialize/resume produces same result as single run" =
+  (* Create a non-trivial search space *)
+  let* n1 = int_range 1 3 in
+  let* n2 = int_range 1 3 in
+  return (n1 + n2) |?> (fun x -> x > 3)
+
+  (* Run A: sample to completion in one shot *)
+  let est_a = create space in
+  ignore (sample 1000 est_a);
+  let results_a = estimates est_a in
+
+  (* Run B: sample partway, serialize to file, deserialize, resume *)
+  let est_b = create space in
+  ignore (sample 100 est_b);
+  save_state "test_save.sexp" est_b;
+  let est_b_resumed = load_state space "test_save.sexp" in
+  ignore (sample 1000 est_b_resumed);
+  let results_b = estimates est_b_resumed in
+
+  (* Compare *)
+  Printf.printf "Run A (single shot): nodes=%.0f fails=%.0f sols=%.0f mat=%d\n"
+    results_a.nodes results_a.fails results_a.solutions results_a.materialized_nodes;
+  Printf.printf "Run B (roundtrip):   nodes=%.0f fails=%.0f sols=%.0f mat=%d\n"
+    results_b.nodes results_b.fails results_b.solutions results_b.materialized_nodes;
+  [%expect{| |}]
 ```
 
-### Phase 3: Deserialization Tests
+### Edge Case Tests (insurance)
 
-```ocaml
-let%test_module "deserialization" = (module struct
-  (* Test: deserialize empty state *)
-  let test_deserialize_empty () = ...
-  
-  (* Test: deserialize produces valid estimator *)
-  let test_deserialize_valid () = 
-    (* Serialize, deserialize, verify can sample *)
-    ...
-  
-  (* Test: roundtrip preserves estimates *)
-  let test_roundtrip_estimates () = 
-    (* Create -> sample -> serialize -> deserialize -> estimates *)
-    (* Compare pre/post roundtrip estimates *)
-    ...
-  
-  (* Test: resumed estimation continues correctly *)
-  let test_resume_sampling () = 
-    (* Create -> sample 100 -> serialize -> deserialize *)
-    (* -> sample 100 more -> verify total samples = 200 *)
-    ...
-end)
-```
+A few tests for important edge cases:
+- Empty estimator (no samples, just root)
+- Already-complete tree
+- Tree with pruned branches
+- Resume with different selector than original
+
+### Isolated Tests (debugging aids only)
+
+Add isolated tests **only when needed** for debugging during implementation. For example:
+- If you need to debug path replay, add an isolated test for that
+- If serialization output looks wrong, print it to verify format
+
+These are not "important" — they're debugging tools. The round-trip test is the proof of correctness.
+
+### Test Data
+
+Use small synthetic search spaces for fast tests (e.g., `int_range 1..3`). The goal is correctness, not scale. A tree with ~20 nodes is sufficient to prove the round-trip works.
 
 ## Design Notes
 
