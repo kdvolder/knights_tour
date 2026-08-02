@@ -43,7 +43,7 @@ let () =
     let current_estimates = Stochastic_estimator.estimates est in
     let stats = Stochastic_estimator.analyze_materialized est in
     
-    Printf.printf "[%.1f%%] ETA: %s\n" p.progress_percent (Stochastic_progress.format_time p.estimated_remaining_seconds);
+    Printf.printf "[%.1f%%] ETA: %s\n" p.progress_percent (Table_logger.format_time 20 p.estimated_remaining_seconds);
     Printf.printf "=== BATCH ===\n";
     Printf.printf "Estimates: nodes=%.0f, fails=%.1f, solutions=%.1f\n" 
       current_estimates.nodes current_estimates.fails current_estimates.solutions;
