@@ -108,16 +108,18 @@ let format_float w v =
   | None -> chop w (Printf.sprintf "%.0g" v)
 
 let format_percent w v =
-  let rec find_fit prec =
-    if prec < 0 then None
-    else
-      let f_str = Printf.sprintf "%.*g" prec (v *. 100.0) in
-      if String.length f_str + 1 <= w then Some (f_str ^ "%")
-      else find_fit (prec - 1)
-  in
-  match find_fit 6 with (* start with 6 significant digits *)
-  | Some f_str -> Printf.sprintf "%*s" w f_str
-  | None -> chop (w - 1) (Printf.sprintf "%g" (v *. 100.0)) ^ "%"
+  if w <= 1 then ellipsis
+  else
+    let rec find_fit prec =
+      if prec < 0 then None
+      else
+        let f_str = Printf.sprintf "%.*g" prec (v *. 100.0) in
+        if String.length f_str + 1 <= w then Some (f_str ^ "%")
+        else find_fit (prec - 1)
+    in
+    match find_fit 6 with (* start with 6 significant digits *)
+    | Some f_str -> Printf.sprintf "%*s" w f_str
+    | None -> chop (w - 1) (Printf.sprintf "%g" (v *. 100.0)) ^ "%"
 let format_string_left w s =
   if grapheme_len s <= w then s ^ String.make (w - grapheme_len s) ' '
   else if w <= 1 then ellipsis
@@ -358,7 +360,7 @@ let%expect_test "format_percent adapts to width" =
     width 4: | 46%|
     width 3: |46%|
     width 2: |…%|
-    width 1: |…%|
+    width 1: |…|
     Formatting: large (1234.57)
     width 12: |     123457%|
     width 11: |    123457%|
@@ -371,7 +373,7 @@ let%expect_test "format_percent adapts to width" =
     width 4: |12…%|
     width 3: |1…%|
     width 2: |…%|
-    width 1: |…%|
+    width 1: |…|
     Formatting: tiny (0.000123457)
     width 12: |  0.0123457%|
     width 11: | 0.0123457%|
@@ -384,7 +386,7 @@ let%expect_test "format_percent adapts to width" =
     width 4: |0.…%|
     width 3: |0…%|
     width 2: |…%|
-    width 1: |…%|
+    width 1: |…|
     Formatting: negative (-0.456789)
     width 12: |   -45.6789%|
     width 11: |  -45.6789%|
@@ -397,5 +399,5 @@ let%expect_test "format_percent adapts to width" =
     width 4: |-46%|
     width 3: |-…%|
     width 2: |…%|
-    width 1: |…%|
+    width 1: |…|
     |}]
