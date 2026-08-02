@@ -1,6 +1,6 @@
 open Pentominos
 
-let () = Random.init (Unix.gettimeofday () |> int_of_float |> abs)
+let () = Random.self_init ()
 
 let batch_size = 1000
 
