@@ -2,7 +2,7 @@ open Searchspace
 open Collections.Util
 
 type 'a node = {
-	 node_view : 'a Searchspace.node_view;           (* Cached inspected view of the searchspace *)
+	 node_view : 'a Searchspace.node_view Lazy.t;    (* Deferred inspected view of the searchspace *)
 	 mutable isCompleted : bool;										 (* Indicates if the node has been fully explored *)
 	 mutable children : 'a node option array;        (* Children indexed by decision number; only some may be materialized *)
 	 mutable samples : int;                          (* Number of samples passing through this node *)
@@ -204,13 +204,14 @@ let num_choices node_view = match node_view with
 	| _ -> 0
 
 let create_node (space : 'a Searchspace.t) : 'a node =
-		let node_view = inspect space in
+		let node_view_lazy = lazy (inspect space) in
+		let node_view = Lazy.force node_view_lazy in
 		let (nodes_estimate, fail_estimate, solution_estimate, materialized_nodes, isCompleted, samples) = match node_view with
 			| Result _ -> (1.0, 0.0, 1.0, 1, true, 1)   (* leaf nodes are created as fully sampled *)
 			| Fail    -> (1.0, 1.0, 0.0, 1, true, 1)   (* leaf nodes are created as fully sampled *)
 			| Fork _  -> (1.0, 0.0, 0.0, 1, false, 0)  (* initial values for forks, will be updated by sampling *)
 		in {
-			node_view;
+			node_view = node_view_lazy;
 			isCompleted;
 			children = Array.make (num_choices node_view) None;
 			samples;
@@ -287,7 +288,7 @@ let greedy_completion_selector _ (node : 'a node) : int =
     List.nth candidates (Random.int (List.length candidates))
 
 let rec walk select_child on_solution (node : 'a node) : unit =
-	match node.node_view with
+	match Lazy.force node.node_view with
 	| Fail -> ()
 	| Result x -> 
 		(* Invoke callback for solution leaves before checking completion *)
@@ -563,7 +564,7 @@ let analyze_materialized (est : 'a t) : materialized_stats =
 	let sol_depths = ref [] in
 	let fork_depths = ref [] in
 	let rec walk depth node =
-		match node.node_view with
+		match Lazy.force node.node_view with
 		| Result _ -> sol_depths := (depth, 1) :: !sol_depths
 		| Fail -> fail_depths := (depth, 1) :: !fail_depths
 		| Fork _ ->
@@ -701,7 +702,7 @@ let%expect_test "sample counting verification" = begin
   
   (* Walk and print the tree structure with sample counts *)
   let rec print_tree indent node =
-    match node.node_view with
+    match Lazy.force node.node_view with
     | Result s -> Printf.printf "%sResult '%s' [samples=%d]\n" indent s node.samples
     | Fail -> Printf.printf "%sFail [samples=%d]\n" indent node.samples
     | Fork _ -> 
@@ -759,7 +760,7 @@ let%expect_test "oversampling behavior with uniform selector" = begin
   
   (* Walk and print the tree structure with sample counts *)
   let rec print_tree indent node =
-    match node.node_view with
+    match Lazy.force node.node_view with
     | Result s -> Printf.printf "%sResult '%s' [samples=%d, completed=%b]\n" indent s node.samples node.isCompleted
     | Fail -> Printf.printf "%sFail [samples=%d, completed=%b]\n" indent node.samples node.isCompleted
     | Fork _ -> 
@@ -1128,7 +1129,7 @@ let%expect_test "hard_braking_memory_aware_selector: scenario - switches between
     Printf.printf "Root: samples=%d materialized=%d pruned=%d\n" est.root.samples est.root.materialized_nodes est.root.pruned_nodes;
     
     (* Print child summary *)
-    match est.root.node_view with
+    match Lazy.force est.root.node_view with
     | Fork _ ->
         for i = 0 to Array.length est.root.children - 1 do
           match est.root.children.(i) with
@@ -1348,7 +1349,7 @@ and decision_path = decision list
 *)
 
 let rec collect_entries (node : 'a node) (path : decision_path) : node_entry Seq.t =
-  let num_choices = match node.node_view with
+  let num_choices = match Lazy.force node.node_view with
     | Fork choices -> List.length choices
     | _ -> 0
   in
@@ -1428,7 +1429,7 @@ let replay_path (root : 'a node) (path : decision_path) : 'a node =
   let rec aux current_node path = match path with
     | [] -> current_node (* reached target node *)
     | d :: rest ->
-        let num_choices = match current_node.node_view with
+        let num_choices = match Lazy.force current_node.node_view with
           | Fork choices -> List.length choices
           | _ -> 0 (* shouldn't happen if path is valid *)
         in
@@ -1438,7 +1439,7 @@ let replay_path (root : 'a node) (path : decision_path) : 'a node =
         let child_node = match current_node.children.(d.chosen) with
           | Some c -> c
           | None ->
-              let new_child = create_node (List.nth (match current_node.node_view with Fork c -> c | _ -> []) d.chosen) in
+              let new_child = create_node (List.nth (match Lazy.force current_node.node_view with Fork c -> c | _ -> []) d.chosen) in
               current_node.children.(d.chosen) <- Some new_child;
               new_child
         in
