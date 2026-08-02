@@ -12,8 +12,8 @@ type progress_row = {
   materialized : int;
   pruned : int;
   net_nodes : int;
-  undersampled_pct : float;
-  progress_pct : float;
+  undersampled_ratio : float; (* 0..1 *)
+  completion_ratio : float;   (* 0..1 *)
   elapsed_seconds : float;
   eta_seconds : float;
 }
@@ -43,8 +43,8 @@ let make_table () =
   |> Table_logger.add_column ~width: 8 ~label:"Materialized" ~extract_and_format:(fun w r -> Table_logger.format_int w r.materialized)
   |> Table_logger.add_column ~width: 8 ~label:"Pruned" ~extract_and_format:(fun w r -> Table_logger.format_int w r.pruned)
   |> Table_logger.add_column ~width: 8 ~label:"Net Nodes" ~extract_and_format:(fun w r -> Table_logger.format_int w r.net_nodes)
-  |> Table_logger.add_column ~width: 8 ~label:"%Under" ~extract_and_format:(fun w r -> Table_logger.format_percent w r.undersampled_pct)
-  |> Table_logger.add_column ~width: 8 ~label:"%Done" ~extract_and_format:(fun w r -> Table_logger.format_percent w r.progress_pct)
+  |> Table_logger.add_column ~width: 8 ~label:"%Under" ~extract_and_format:(fun w r -> Table_logger.format_percent w r.undersampled_ratio)
+  |> Table_logger.add_column ~width: 8 ~label:"%Done" ~extract_and_format:(fun w r -> Table_logger.format_percent w r.completion_ratio)
   |> Table_logger.add_column ~width:20 ~label:"Elapsed" ~extract_and_format:(fun w r -> Table_logger.format_time w r.elapsed_seconds)
   |> Table_logger.add_column ~width:25 ~label:"ETA" ~extract_and_format:(fun w r -> Table_logger.format_time w r.eta_seconds)
 
@@ -83,8 +83,8 @@ let () =
     let net_nodes = p.materialized_nodes - p.pruned_nodes in
     let stats = get_stats () in
     let batch_total = stats.undersampled_count + stats.greedy_count in
-    let undersampled_pct =
-      if batch_total > 0 then Float.of_int stats.undersampled_count /. Float.of_int batch_total *. 100.0
+    let undersampled_ratio =
+      if batch_total > 0 then Float.of_int stats.undersampled_count /. Float.of_int batch_total
       else 0.0 in
     let row = {
       batch = !batch_count;
@@ -96,8 +96,8 @@ let () =
       materialized = p.materialized_nodes;
       pruned = p.pruned_nodes;
       net_nodes;
-      undersampled_pct;
-      progress_pct = p.progress_percent;
+      undersampled_ratio;
+      completion_ratio = p.progress_ratio;
       elapsed_seconds = p.elapsed_seconds;
       eta_seconds = p.estimated_remaining_seconds;
     } in

@@ -7,10 +7,10 @@ type progress = {
   solutions_estimate : float;
   materialized_nodes : int;
   pruned_nodes : int;
-  progress_percent : float;
+  progress_ratio : float; (* 0..1 *)
   estimated_remaining_seconds : float;
 }
-(** Progress record with elapsed time, completion percentage, and ETA. *)
+(** Progress record with elapsed time, completion ratio (0..1), and ETA. *)
 
 val make_progress : float -> 'a Stochastic_estimator.t -> progress
 (** [make_progress start_time est] creates a progress record from the elapsed time since [start_time]
