@@ -107,7 +107,17 @@ let format_float w v =
   | Some f_str -> Printf.sprintf "%*s" w f_str
   | None -> chop w (Printf.sprintf "%.0g" v)
 
-let format_percent w v = Printf.sprintf "%*s" w (Printf.sprintf "%.1f%%" v)
+let format_percent w v =
+  let rec find_fit prec =
+    if prec < 0 then None
+    else
+      let f_str = Printf.sprintf "%.*g" prec (v *. 100.0) in
+      if String.length f_str + 1 <= w then Some (f_str ^ "%")
+      else find_fit (prec - 1)
+  in
+  match find_fit 6 with (* start with 6 significant digits *)
+  | Some f_str -> Printf.sprintf "%*s" w f_str
+  | None -> chop (w - 1) (Printf.sprintf "%g" (v *. 100.0)) ^ "%"
 let format_string_left w s =
   if grapheme_len s <= w then s ^ String.make (w - grapheme_len s) ' '
   else if w <= 1 then ellipsis
@@ -321,4 +331,71 @@ let%expect_test "format_float adapts to width" =
     width 3: |-1…|
     width 2: |-…|
     width 1: |…|
+    |}]
+
+let%expect_test "format_percent adapts to width" =
+  List.iter (fun (label, v) ->
+    Printf.printf "Formatting: %s (%.6g)\n" label v;
+    for i = 12 downto 1 do
+      Printf.printf "width %d: |%s|\n" i (format_percent i v)
+    done;
+  ) [
+    "normal", 0.456789;
+    "large", 1234.56789;
+    "tiny", 0.000123456789;
+    "negative", -0.456789;
+  ];
+  [%expect{|
+    Formatting: normal (0.456789)
+    width 12: |    45.6789%|
+    width 11: |   45.6789%|
+    width 10: |  45.6789%|
+    width 9: | 45.6789%|
+    width 8: |45.6789%|
+    width 7: |45.679%|
+    width 6: |45.68%|
+    width 5: |45.7%|
+    width 4: | 46%|
+    width 3: |46%|
+    width 2: |…%|
+    width 1: |…%|
+    Formatting: large (1234.57)
+    width 12: |     123457%|
+    width 11: |    123457%|
+    width 10: |   123457%|
+    width 9: |  123457%|
+    width 8: | 123457%|
+    width 7: |123457%|
+    width 6: |1e+05%|
+    width 5: |123…%|
+    width 4: |12…%|
+    width 3: |1…%|
+    width 2: |…%|
+    width 1: |…%|
+    Formatting: tiny (0.000123457)
+    width 12: |  0.0123457%|
+    width 11: | 0.0123457%|
+    width 10: |0.0123457%|
+    width 9: |0.012346%|
+    width 8: |0.01235%|
+    width 7: |0.0123%|
+    width 6: |0.012%|
+    width 5: |0.01%|
+    width 4: |0.…%|
+    width 3: |0…%|
+    width 2: |…%|
+    width 1: |…%|
+    Formatting: negative (-0.456789)
+    width 12: |   -45.6789%|
+    width 11: |  -45.6789%|
+    width 10: | -45.6789%|
+    width 9: |-45.6789%|
+    width 8: |-45.679%|
+    width 7: |-45.68%|
+    width 6: |-45.7%|
+    width 5: | -46%|
+    width 4: |-46%|
+    width 3: |-…%|
+    width 2: |…%|
+    width 1: |…%|
     |}]
