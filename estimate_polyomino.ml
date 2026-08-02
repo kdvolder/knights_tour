@@ -1,5 +1,7 @@
 open Pentominos
 
+let () = Random.init (Unix.gettimeofday () |> int_of_float |> abs)
+
 let batch_size = 1000
 
 type progress_row = {
@@ -34,8 +36,8 @@ let nodes_in_memory est =
   estimates.materialized_nodes - estimates.pruned_nodes |> Float.of_int
 
 let make_table () =
-  Table_logger.add_column ~label:"Batch" ~extract_and_format:(fun w r -> Table_logger.format_int w r.batch) []
-  |> Table_logger.add_column ~label:"Samples" ~extract_and_format:(fun w r -> Table_logger.format_int w r.total_samples)
+  Table_logger   .add_column ~width: 7 ~label:"Batch" ~extract_and_format:(fun w r -> Table_logger.format_int w r.batch) []
+  |> Table_logger.add_column ~width: 8 ~label:"Samples" ~extract_and_format:(fun w r -> Table_logger.format_int w r.total_samples)
   |> Table_logger.add_column ~width:12 ~label:"Nodes Est" ~extract_and_format:(fun w r -> Table_logger.format_float w r.nodes_est)
   |> Table_logger.add_column ~width:12 ~label:"Fails Est" ~extract_and_format:(fun w r -> Table_logger.format_float w r.fails_est)
   |> Table_logger.add_column ~width:12 ~label:"Sols Est" ~extract_and_format:(fun w r -> Table_logger.format_float w r.sols_est)
@@ -43,10 +45,10 @@ let make_table () =
   |> Table_logger.add_column ~width: 8 ~label:"Materialized" ~extract_and_format:(fun w r -> Table_logger.format_int w r.materialized)
   |> Table_logger.add_column ~width: 8 ~label:"Pruned" ~extract_and_format:(fun w r -> Table_logger.format_int w r.pruned)
   |> Table_logger.add_column ~width: 8 ~label:"Net Nodes" ~extract_and_format:(fun w r -> Table_logger.format_int w r.net_nodes)
-  |> Table_logger.add_column ~width: 8 ~label:"%Under" ~extract_and_format:(fun w r -> Table_logger.format_percent w r.undersampled_ratio)
+  |> Table_logger.add_column ~width: 5 ~label:"%Under" ~extract_and_format:(fun w r -> Table_logger.format_percent w r.undersampled_ratio)
   |> Table_logger.add_column ~width: 8 ~label:"%Done" ~extract_and_format:(fun w r -> Table_logger.format_percent w r.completion_ratio)
   |> Table_logger.add_column ~width:20 ~label:"Elapsed" ~extract_and_format:(fun w r -> Table_logger.format_time w r.elapsed_seconds)
-  |> Table_logger.add_column ~width:25 ~label:"ETA" ~extract_and_format:(fun w r -> Table_logger.format_time w r.eta_seconds)
+  |> Table_logger.add_column ~width:20 ~label:"ETA" ~extract_and_format:(fun w r -> Table_logger.format_time w r.eta_seconds)
 
 let () =
   if Array.length Sys.argv <> 2 then begin
