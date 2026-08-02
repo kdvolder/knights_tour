@@ -1,7 +1,7 @@
 (library 
   (name searchspace)
   (public_name knights_tour.searchspace)
-  (libraries collections unix)
+  (libraries collections unix uuseg)
   (inline_tests)
   (preprocess (pps ppx_inline_test ppx_expect))
   (modules searchspace table_logger stochastic_progress stochastic_estimator memfree)
