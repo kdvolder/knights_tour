@@ -215,14 +215,8 @@ let () =
   let table = make_table () in
   Table_logger.print_header table;
   
-  let batch_count = ref 0 in
-  let total_samples = ref 0 in
-  
   (* Run estimation with auto-save and CTRL-C handling *)
   Stochastic_progress.run_with_progress ~batch_size ~on_progress:(fun p ->
-    incr batch_count;
-    total_samples := !total_samples + batch_size;
-    
     (* Auto-save check (only between batches) *)
     ignore (try_autosave auto_save_state estimator puzzle_file p.elapsed_seconds);
     
@@ -235,8 +229,8 @@ let () =
       if batch_total > 0 then Float.of_int stats.undersampled_count /. Float.of_int batch_total
       else 0.0 in
     let row = {
-      batch = !batch_count;
-      total_samples = !total_samples;
+      batch = p.batch;
+      total_samples = p.total_samples;
       nodes_est = est.nodes;
       fails_est = est.fails;
       sols_est = est.solutions;
@@ -250,7 +244,7 @@ let () =
       eta_seconds = p.estimated_remaining_seconds;
     } in
     Table_logger.print_row table row;
-    if !batch_count mod 30 = 0 then begin
+    if p.batch mod 30 = 0 then begin
       Printf.printf "\n%!";
       Table_logger.print_header table
     end;

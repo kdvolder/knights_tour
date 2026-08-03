@@ -1,4 +1,6 @@
 type progress = {
+  batch : int;                          (* Batch number, starts at 0 for initial state *)
+  total_samples : int;                  (* Cumulative samples across all batches *)
   elapsed_seconds : float;
   total_nodes_estimate : float;
   fails_estimate : float;
@@ -33,6 +35,7 @@ let make_progress (start_time : float) (est : 'a Stochastic_estimator.t) : progr
       Float.infinity
   in
   {
+    batch = 0; total_samples = 0;
     elapsed_seconds = elapsed;
     total_nodes_estimate = ests.nodes;
     fails_estimate = ests.fails;
@@ -54,17 +57,24 @@ let default_progress_printer (p : progress) : bool =
 
 let run_with_progress ?(batch_size = 100) ?(on_progress = default_progress_printer) (est : 'a t) : unit =
   let start_time = Unix.gettimeofday () in
+  let batch_count = ref 0 in
+  let total_samples = ref 0 in
+  (* Initial progress event (batch 0, 0 samples, pre-sampling state) *)
+  let p0 = { (make_progress start_time est) with batch = 0; total_samples = 0 } in
+  if not (on_progress p0) then raise Exit;
   let rec loop () =
     if not (is_completed est) then (
       ignore (sample batch_size est);
-      let p = make_progress start_time est in
+      incr batch_count;
+      total_samples := !total_samples + batch_size;
+      let p = { (make_progress start_time est) with batch = !batch_count; total_samples = !total_samples } in
       if not (on_progress p) then raise Exit;
       loop ()
     )
   in
   (try loop () with Exit -> ());
   (* Final report when complete or interrupted *)
-  let p = make_progress start_time est in
+  let p = { (make_progress start_time est) with batch = !batch_count; total_samples = !total_samples } in
   ignore (on_progress p)
 
 (** Progress Data Structure Tests *)
@@ -128,7 +138,7 @@ let%expect_test "run_with_progress invokes callback after each batch" = begin
   ) est;
   Printf.printf "Reports: %s\n" (String.concat ", " (List.map string_of_int !reports));
   [%expect{|
-    Reports: 4, 4
+    Reports: 1, 4, 4
   |}]
 end
 
@@ -143,6 +153,7 @@ let%expect_test "run_with_progress uses default stdout printer" = begin
   let est = create simple_tree in
   run_with_progress ~batch_size:3 est;
   [%expect{|
+    [100.0%] materialized: 1, elapsed:                  0 s ETA: done
     [100.0%] materialized: 4, elapsed:                  0 s ETA: done
     [100.0%] materialized: 4, elapsed:                  0 s ETA: done
     |}]

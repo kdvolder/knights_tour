@@ -1,6 +1,8 @@
 (** Progress monitoring and reporting for stochastic estimators *)
 
 type progress = {
+  batch : int;
+  total_samples : int;
   elapsed_seconds : float;
   total_nodes_estimate : float;
   fails_estimate : float;
@@ -10,7 +12,7 @@ type progress = {
   progress_ratio : float; (* 0..1 *)
   estimated_remaining_seconds : float;
 }
-(** Progress record with elapsed time, completion ratio (0..1), and ETA. *)
+(** Progress record with batch number, cumulative samples, elapsed time, completion ratio (0..1), and ETA. *)
 
 val make_progress : float -> 'a Stochastic_estimator.t -> progress
 (** [make_progress start_time est] creates a progress record from the elapsed time since [start_time]
