@@ -132,6 +132,9 @@ val estimates : 'a t -> estimates
 val is_completed : 'a t -> bool
 (** [is_completed est] returns true if the search space has been fully explored. *)
 
+val materialized_at_load : 'a t -> int
+(** [materialized_at_load est] returns the number of materialized nodes when this estimator was created or loaded. Used for resume-correct progress/ETA calculations. *)
+
 type leaf_type = Fail | Solution
 
 type materialized_stats = {

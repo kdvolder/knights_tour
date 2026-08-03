@@ -19,6 +19,7 @@ and  'a t = {
 	root : 'a node;
 	selector : 'a child_selector;
 	on_solution : 'a -> unit;
+	materialized_at_load : int;  (* nodes materialized at session start, for resume-correct progress *)
 }
 
 type decision = {
@@ -393,7 +394,7 @@ let rec balanced_range start stop =
 		balanced_range start mid ++ balanced_range (mid + 1) stop
 
 let create ?(selector=undersampled_selector) ?(on_solution=(fun _ -> ())) (space : 'a Searchspace.t) : 'a t =
-	{ root = create_node space; selector; on_solution }
+	{ root = create_node space; selector; on_solution; materialized_at_load = 0 }
 
 let estimate ?(selector=undersampled_selector) n_trials (space : 'a Searchspace.t) : estimates =
   let est = create ~selector space in
@@ -587,6 +588,8 @@ let estimates (est : 'a t) : estimates =
 	}
 
 let is_completed (est : 'a t) : bool = est.root.isCompleted
+
+let materialized_at_load (est : 'a t) : int = est.materialized_at_load
 
 let analyze_materialized (est : 'a t) : materialized_stats =
 	(* Walk the materialized tree and collect depth statistics. Read-only - no new materialization. *)
@@ -1514,7 +1517,7 @@ let load_state ?(selector = undersampled_selector) ?(on_solution = (fun _ -> ())
           in
           loop ();
           
-          { root; selector; on_solution }
+          { root; selector; on_solution; materialized_at_load = root.materialized_nodes }
       | ["version"; v] -> close_in ic; failwith ("Unsupported version: " ^ v)
       | _ -> close_in ic; failwith "Invalid file format: expected 'version N' as first line"
 

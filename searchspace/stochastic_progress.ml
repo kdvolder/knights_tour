@@ -11,13 +11,14 @@ type progress = {
 
 open Stochastic_estimator
 
-let make_progress (start_time : float) (est : 'a t) : progress =
+let make_progress (start_time : float) (est : 'a Stochastic_estimator.t) : progress =
   let now = Unix.gettimeofday () in
   let elapsed = now -. start_time in
   let ests = Stochastic_estimator.estimates est in
+  let materialized_since_load = ests.materialized_nodes - Stochastic_estimator.materialized_at_load est in
   let progress_ratio =
     if ests.nodes > 0. then
-      (float_of_int ests.materialized_nodes) /. ests.nodes
+      (float_of_int materialized_since_load) /. ests.nodes
     else 0.0
   in
   let estimated_remaining =
