@@ -203,15 +203,28 @@ let num_choices node_view = match node_view with
 	| Fork choices -> List.length choices
 	| _ -> 0
 
+type node_entry = {
+  path : decision_path;
+  num_choices : int;
+  samples : int;
+  nodes_estimate : float;
+  fail_estimate : float;
+  solution_estimate : float;
+  materialized_nodes_count : int;
+  pruned_nodes : int;
+  is_completed : bool;
+}
+
+and decision_path = decision list
+
 let create_node (space : 'a Searchspace.t) : 'a node =
-		let node_view_lazy = lazy (inspect space) in
-		let node_view = Lazy.force node_view_lazy in
+		let node_view = inspect space in
 		let (nodes_estimate, fail_estimate, solution_estimate, materialized_nodes, isCompleted, samples) = match node_view with
 			| Result _ -> (1.0, 0.0, 1.0, 1, true, 1)   (* leaf nodes are created as fully sampled *)
 			| Fail    -> (1.0, 1.0, 0.0, 1, true, 1)   (* leaf nodes are created as fully sampled *)
 			| Fork _  -> (1.0, 0.0, 0.0, 1, false, 0)  (* initial values for forks, will be updated by sampling *)
 		in {
-			node_view = node_view_lazy;
+			node_view = Lazy.from_val node_view;
 			isCompleted;
 			children = Array.make (num_choices node_view) None;
 			samples;
@@ -222,11 +235,25 @@ let create_node (space : 'a Searchspace.t) : 'a node =
 			pruned_nodes = 0;
 		}
 
+(* Create a node with an unforced view. Stats are set from serialized data.
+   Takes a lazy node_view so the expensive 'inspect' is deferred until actually needed. *)
+let create_node_lazy (view : 'a Searchspace.node_view Lazy.t) (entry : node_entry) : 'a node = {
+	node_view = view;
+	isCompleted = entry.is_completed;
+	children = Array.make entry.num_choices None;
+	samples = entry.samples;
+	nodes_estimate = entry.nodes_estimate;
+	fail_estimate = entry.fail_estimate;
+	solution_estimate = entry.solution_estimate;
+	materialized_nodes = entry.materialized_nodes_count;
+	pruned_nodes = entry.pruned_nodes;
+}
+
 let uniform_selector _ node =
 	Random.int (Array.length node.children)
 
 let sample_rate = function
-	| Some child -> float_of_int child.samples /. (child.fail_estimate +. child.solution_estimate)
+	| Some (child : 'a node) -> float_of_int child.samples /. (child.fail_estimate +. child.solution_estimate)
 	| None -> 0.0
 
 let undersampled_selector (_:'a t) (node : 'a node) : int =
@@ -308,7 +335,7 @@ let rec walk select_child on_solution (node : 'a node) : unit =
 				in
 				walk select_child on_solution child_node;
 				(* Calculate our sample count as sum of all child sample counts *)
-				node.samples <- Array.fold_left (fun acc child_opt -> 
+				node.samples <- Array.fold_left (fun acc (child_opt : 'a node option) -> 
 					match child_opt with 
 					| Some child -> acc + child.samples 
 					| None -> acc
@@ -326,7 +353,7 @@ let rec walk select_child on_solution (node : 'a node) : unit =
 					node.pruned_nodes <- node.materialized_nodes - 1;
 					node.children <- [||]
 				) else (
-					node.pruned_nodes <- Array.fold_left (fun acc child_opt -> match child_opt with Some c -> acc + c.pruned_nodes | None -> acc) 0 node.children
+					node.pruned_nodes <- Array.fold_left (fun acc (child_opt : 'a node option) -> match child_opt with Some c -> acc + c.pruned_nodes | None -> acc) 0 node.children
 				)
 			)
 	)
@@ -1328,20 +1355,6 @@ end
     State Serialization - Decision Path Encoding
     ============================================================================ **)
 
-type node_entry = {
-  path : decision_path;
-  num_choices : int;
-  samples : int;
-  nodes_estimate : float;
-  fail_estimate : float;
-  solution_estimate : float;
-  materialized_nodes_count : int;
-  pruned_nodes : int;
-  is_completed : bool;
-}
-
-and decision_path = decision list
-
 (* Simple line-based format for serialization:
    Line 1: version N
    Lines 2+: path|num_choices|samples|nodes_estimate|fail_estimate|solution_estimate|materialized_nodes_count|pruned_nodes|is_completed
@@ -1424,28 +1437,51 @@ let parse_line (line : string) : node_entry =
     is_completed = match List.nth parts 8 with "true" -> true | _ -> false;
   }
 
-(* Replay a decision path to find/create nodes along the way, linking them in the tree *)
-let replay_path (root : 'a node) (path : decision_path) : 'a node =
-  let rec aux current_node path = match path with
-    | [] -> current_node (* reached target node *)
-    | d :: rest ->
-        let num_choices = match Lazy.force current_node.node_view with
-          | Fork choices -> List.length choices
-          | _ -> 0 (* shouldn't happen if path is valid *)
-        in
-        if d.chosen >= num_choices then
-          failwith ("Invalid decision: chosen=" ^ string_of_int d.chosen ^ " >= choices=" ^ string_of_int num_choices);
-        (* Get or create child at index d.chosen *)
-        let child_node = match current_node.children.(d.chosen) with
-          | Some c -> c
-          | None ->
-              let new_child = create_node (List.nth (match Lazy.force current_node.node_view with Fork c -> c | _ -> []) d.chosen) in
-              current_node.children.(d.chosen) <- Some new_child;
-              new_child
-        in
-        aux child_node rest
+(* Replay a decision path and apply an entry's stats to the corresponding node.
+  Each entry in the file corresponds to exactly one node identified by its path.
+  Since entries are in preorder, parent nodes already exist when we process children. *)
+let replay_path (_space : 'a Searchspace.t) (root : 'a node) (entry : node_entry) : unit =
+  (* Apply entry stats to an existing node *)
+  let apply_stats (node : 'a node) (entry : node_entry) : unit =
+    node.samples <- entry.samples;
+    node.nodes_estimate <- entry.nodes_estimate;
+    node.fail_estimate <- entry.fail_estimate;
+    node.solution_estimate <- entry.solution_estimate;
+    node.materialized_nodes <- entry.materialized_nodes_count;
+    node.pruned_nodes <- entry.pruned_nodes;
+    node.isCompleted <- entry.is_completed
   in
-  aux root path
+  match entry.path with
+  | [] ->
+      (* Root entry — apply stats to the root node *)
+      apply_stats root entry
+  | { chosen = _first; choices = _nc } :: _rest ->
+      (* Navigate the path and create the target node at the end.
+         Child views are constructed lazily from parent's lazy view — nothing is forced. *)
+      let rec navigate (node : 'a node) (path : decision_path) : unit =
+        match path with
+        | [] -> ()  (* We've reached the target — already created by previous step *)
+        | { chosen = c; choices = _nc } :: rest' ->
+            let child_opt : 'a node option = node.children.(c) in
+            match (child_opt, rest') with
+            | (Some (child : 'a node)), _ ->
+                navigate child rest'
+            | (None, []) ->
+                (* Create target node with a lazy view derived from parent's lazy view.
+                   Nothing is forced — the child's inspect will only happen when this node
+                   is actually inspected during sampling. *)
+                let child_view : 'a Searchspace.node_view Lazy.t = lazy (
+                  match Lazy.force node.node_view with
+                  | Fork choices -> inspect (List.nth choices c)
+                  | _ -> Fail
+                ) in
+                let new_node : 'a node = create_node_lazy child_view entry in
+                node.children.(c) <- Some new_node
+            | (None, _ :: _) ->
+                (* Intermediate node missing — shouldn't happen in preorder *)
+                failwith "Intermediate node missing during replay (preorder violation)"
+      in
+      navigate root entry.path
 
 (* Load state from file and reconstruct estimator *)
 let load_state (space : 'a Searchspace.t) (filename : string) : 'a t =
@@ -1458,21 +1494,21 @@ let load_state (space : 'a Searchspace.t) (filename : string) : 'a t =
       let version_parts = String.split_on_char ' ' first_line in
       match version_parts with
       | ["version"; "1"] ->
-          (* Create root node *)
-          let root = create_node space in
+          (* Read the first entry — it must be the root (path = []) *)
+          let root_entry_line = try Some (input_line ic) with End_of_file -> None in
+          let root_entry = match root_entry_line with
+            | None -> close_in ic; failwith "Invalid file format: no root entry"
+            | Some root_line -> parse_line root_line
+          in
+          (* Create root node with lazy view and correct children size from entry — nothing forced. *)
+          let root_view : 'a Searchspace.node_view Lazy.t = lazy (inspect space) in
+          let root : 'a node = create_node_lazy root_view root_entry in
           
-          (* Stream entries one at a time — file is already in DFS pre-order, so parents come before children *)
+          (* Stream remaining entries one at a time — file is already in DFS pre-order, so parents come before children *)
           let rec loop () = try
             let line = input_line ic in
             let entry = parse_line line in
-            let target_node = replay_path root entry.path in
-            target_node.samples <- entry.samples;
-            target_node.nodes_estimate <- entry.nodes_estimate;
-            target_node.fail_estimate <- entry.fail_estimate;
-            target_node.solution_estimate <- entry.solution_estimate;
-            target_node.materialized_nodes <- entry.materialized_nodes_count;
-            target_node.pruned_nodes <- entry.pruned_nodes;
-            target_node.isCompleted <- entry.is_completed;
+            replay_path space root entry;  (* applies stats to the correct node *)
             loop ()
           with End_of_file -> close_in ic
           in
@@ -1796,4 +1832,44 @@ let%expect_test "edge case: malformed line should fail" = begin
     Printf.printf "Correctly rejected malformed line: %s\n" msg;
 
   [%expect{| Correctly rejected malformed line: Invalid entry format (expected 9 fields, got 1) |}]
+end
+
+let%expect_test "lazy views on load_state" = begin
+  (* Counter that increments each time inspect is called *)
+  let inspect_count = ref 0 in
+
+  (* Space with 20 branches — each child's inspect increments the counter *)
+  let nums = int_range 1 20 |=> fun x -> begin
+      inspect_count := !inspect_count + 1;
+      return x
+  end in
+
+  let space = (
+    let* x = nums in
+    let* y = nums in
+    return (x+y)
+  ) in 
+
+  (* Sample a few paths — creates some materialized nodes *)
+  let est = create space in
+  ignore (sample 20 est);
+  Printf.printf "After sampling: %d inspections, mat=%d\n" !inspect_count (estimates est).materialized_nodes;
+
+  (* Save state *)
+  save_state "/tmp/test_lazy.sexp" est;
+
+  inspect_count := 0;
+  (* Load state — check counter immediately, before any new sampling *)
+  let est = load_state space "/tmp/test_lazy.sexp" in
+  Printf.printf "After load (before resume): inspections %d, mat=%d\n" !inspect_count (estimates est).materialized_nodes;
+
+  (* Resume sampling — only visits some branches *)
+  ignore (sample 10 est);
+  Printf.printf "After resume: %d inspections, mat=%d\n" !inspect_count (estimates est).materialized_nodes;
+
+  [%expect{|
+    After sampling: 30 inspections, mat=50
+    After load (before resume): inspections 0, mat=50
+    After resume: 16 inspections, mat=77
+    |}]
 end
