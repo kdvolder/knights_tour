@@ -253,12 +253,19 @@ let () =
     if !batch_count mod 30 = 0 then begin
       Printf.printf "\n%!";
       Table_logger.print_header table
-    end
+    end;
+    not !shutting_down
   ) estimator;
   
-  (* Final save on completion *)
+  (* Final save on completion or shutdown *)
   let final_elapsed = Unix.gettimeofday () -. start_time in
   ignore (try_autosave auto_save_state estimator puzzle_file final_elapsed);
+  
+  if !shutting_down then (
+    Printf.printf "[Auto-save complete] State saved. Exiting.\n%!";
+    close_out out_ch;
+    exit 0
+  );
   
   (* Final report *)
   let est = Stochastic_estimator.estimates estimator in

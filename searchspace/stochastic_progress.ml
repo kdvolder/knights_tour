@@ -39,14 +39,14 @@ let make_progress (start_time : float) (est : 'a t) : progress =
     estimated_remaining_seconds = estimated_remaining;
   }
 
-let default_progress_printer (p : progress) : unit =
+let default_progress_printer (p : progress) : bool =
   let eta_str =
     if p.progress_ratio >= 1. then "done"
     else if Float.is_infinite p.estimated_remaining_seconds then "inf"
     else Table_logger.format_time 20 p.estimated_remaining_seconds
   in
   Printf.printf "[%5.1f%%] materialized: %d, elapsed: %-20s ETA: %s\n" (p.progress_ratio *. 100.0) p.materialized_nodes (Table_logger.format_time 20 p.elapsed_seconds) eta_str;
-  flush stdout
+  flush stdout; true
 
 let run_with_progress ?(batch_size = 100) ?(on_progress = default_progress_printer) (est : 'a t) : unit =
   let start_time = Unix.gettimeofday () in
@@ -54,14 +54,14 @@ let run_with_progress ?(batch_size = 100) ?(on_progress = default_progress_print
     if not (is_completed est) then (
       ignore (sample batch_size est);
       let p = make_progress start_time est in
-      on_progress p;
+      if not (on_progress p) then raise Exit;
       loop ()
     )
   in
-  loop ();
-  (* Final report when complete *)
+  (try loop () with Exit -> ());
+  (* Final report when complete or interrupted *)
   let p = make_progress start_time est in
-  on_progress p
+  ignore (on_progress p)
 
 (** Progress Data Structure Tests *)
 
@@ -119,7 +119,8 @@ let%expect_test "run_with_progress invokes callback after each batch" = begin
   let est = create simple_tree in
   let reports = ref [] in
   run_with_progress ~batch_size:3 ~on_progress:(fun p ->
-    reports := !reports @ [p.materialized_nodes]
+    reports := !reports @ [p.materialized_nodes];
+    true
   ) est;
   Printf.printf "Reports: %s\n" (String.concat ", " (List.map string_of_int !reports));
   [%expect{|
@@ -150,7 +151,8 @@ let%expect_test "run_with_progress stops when complete" = begin
   let est = create simple_tree in
   let reports = ref [] in
   run_with_progress ~batch_size:5 ~on_progress:(fun p ->
-    reports := !reports @ [p.materialized_nodes]
+    reports := !reports @ [p.materialized_nodes];
+    true
   ) est;
   Printf.printf "Final materialized: %d\n" (List.hd (List.rev !reports));
   [%expect{|
