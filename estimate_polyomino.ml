@@ -97,9 +97,9 @@ let make_auto_save_state min_interval = {
   next_save_time = Unix.gettimeofday () +. min_interval;
 }
 
-let try_autosave auto_save_state est puzzle_file elapsed =
+let try_autosave ?(force = false) auto_save_state est puzzle_file elapsed =
   let now = Unix.gettimeofday () in
-  if now >= auto_save_state.next_save_time then (
+  if force || now >= auto_save_state.next_save_time then (
     let save_time = save_autosave est puzzle_file in
     (* Compute next interval: max(min_interval, save_time * 1000) *)
     let dynamic_interval = save_time *. 1000. in
@@ -253,10 +253,11 @@ let () =
   
   (* Final save on completion or shutdown *)
   let final_elapsed = Unix.gettimeofday () -. start_time in
-  ignore (try_autosave auto_save_state estimator puzzle_file final_elapsed);
+  let saved = try_autosave ~force:!shutting_down auto_save_state estimator puzzle_file final_elapsed in
   
   if !shutting_down then (
-    Printf.printf "[Auto-save complete] State saved. Exiting.\n%!";
+    if saved then Printf.printf "[Auto-save complete] State saved. Exiting.\n%!"
+    else Printf.printf "[Shutdown] No autosave (interval not reached). Exiting.\n%!";
     close_out out_ch;
     exit 0
   );

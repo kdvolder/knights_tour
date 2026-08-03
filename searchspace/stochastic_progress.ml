@@ -73,9 +73,11 @@ let run_with_progress ?(batch_size = 100) ?(on_progress = default_progress_print
     )
   in
   (try loop () with Exit -> ());
-  (* Final report when complete or interrupted *)
-  let p = { (make_progress start_time est) with batch = !batch_count; total_samples = !total_samples } in
-  ignore (on_progress p)
+  (* Final report only when complete — interrupted runs already printed their last batch *)
+  if is_completed est then (
+    let p = { (make_progress start_time est) with batch = !batch_count; total_samples = !total_samples } in
+    ignore (on_progress p)
+  )
 
 (** Progress Data Structure Tests *)
 
