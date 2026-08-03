@@ -15,15 +15,18 @@ let make_progress (start_time : float) (est : 'a Stochastic_estimator.t) : progr
   let now = Unix.gettimeofday () in
   let elapsed = now -. start_time in
   let ests = Stochastic_estimator.estimates est in
-  let materialized_since_load = ests.materialized_nodes - Stochastic_estimator.materialized_at_load est in
+  let materialized_at_load = Stochastic_estimator.materialized_at_load est in
+  (* Work accounting: total_work is what remains to be done this session *)
+  let work_done = ests.materialized_nodes - materialized_at_load in
+  let total_work = ests.nodes -. Float.of_int materialized_at_load in
+  let work_remaining = total_work -. Float.of_int work_done in
   let progress_ratio =
-    if ests.nodes > 0. then
-      (float_of_int materialized_since_load) /. ests.nodes
+    if total_work > 0. then Float.of_int work_done /. total_work
     else 0.0
   in
   let estimated_remaining =
     if progress_ratio > 0. && progress_ratio < 1. then
-      elapsed *. (1.0 /. progress_ratio) -. elapsed
+      elapsed *. (work_remaining /. Float.of_int work_done)
     else if progress_ratio >= 1. then
       0.0
     else
