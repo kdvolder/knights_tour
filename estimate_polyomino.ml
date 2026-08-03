@@ -244,7 +244,7 @@ let () =
       eta_seconds = p.estimated_remaining_seconds;
     } in
     Table_logger.print_row table row;
-    if p.batch mod 30 = 0 then begin
+    if p.batch > 0 && p.batch mod 30 = 0 then begin
       Printf.printf "\n%!";
       Table_logger.print_header table
     end;
