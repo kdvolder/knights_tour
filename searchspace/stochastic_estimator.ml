@@ -3,6 +3,7 @@ open Collections.Util
 
 type 'a node = {
 	 node_view : 'a Searchspace.node_view Lazy.t;    (* Deferred inspected view of the searchspace *)
+	 num_choices : int;                              (* Number of children — stored to avoid forcing lazy view *)
 	 mutable isCompleted : bool;										 (* Indicates if the node has been fully explored *)
 	 mutable children : 'a node option array;        (* Children indexed by decision number; only some may be materialized *)
 	 mutable samples : int;                          (* Number of samples passing through this node *)
@@ -225,6 +226,7 @@ let create_node (space : 'a Searchspace.t) : 'a node =
 			| Fork _  -> (1.0, 0.0, 0.0, 1, false, 0)  (* initial values for forks, will be updated by sampling *)
 		in {
 			node_view = Lazy.from_val node_view;
+			num_choices = num_choices node_view;
 			isCompleted;
 			children = Array.make (num_choices node_view) None;
 			samples;
@@ -239,6 +241,7 @@ let create_node (space : 'a Searchspace.t) : 'a node =
    Takes a lazy node_view so the expensive 'inspect' is deferred until actually needed. *)
 let create_node_lazy (view : 'a Searchspace.node_view Lazy.t) (entry : node_entry) : 'a node = {
 	node_view = view;
+	num_choices = entry.num_choices;
 	isCompleted = entry.is_completed;
 	children = Array.make entry.num_choices None;
 	samples = entry.samples;
@@ -1362,10 +1365,7 @@ end
 *)
 
 let rec collect_entries (node : 'a node) (path : decision_path) : node_entry Seq.t =
-  let num_choices = match Lazy.force node.node_view with
-    | Fork choices -> List.length choices
-    | _ -> 0
-  in
+  let num_choices = node.num_choices in
   let entry = {
     path;
     num_choices;
@@ -1867,9 +1867,15 @@ let%expect_test "lazy views on load_state" = begin
   ignore (sample 10 est);
   Printf.printf "After resume: %d inspections, mat=%d\n" !inspect_count (estimates est).materialized_nodes;
 
+  (* Saving doesn't force nodes *)
+  inspect_count := 0;
+  save_state "/tmp/test_lazy.sexp" est;
+  Printf.printf "After second save: %d inspections, mat=%d\n" !inspect_count (estimates est).materialized_nodes;
+
   [%expect{|
     After sampling: 30 inspections, mat=50
     After load (before resume): inspections 0, mat=50
     After resume: 16 inspections, mat=77
+    After second save: 0 inspections, mat=77
     |}]
 end

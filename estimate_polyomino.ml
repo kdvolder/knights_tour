@@ -97,7 +97,7 @@ let make_auto_save_state min_interval = {
   next_save_time = Unix.gettimeofday () +. min_interval;
 }
 
-let try_autosave auto_save_state est puzzle_file =
+let try_autosave auto_save_state est puzzle_file elapsed =
   let now = Unix.gettimeofday () in
   if now >= auto_save_state.next_save_time then (
     let save_time = save_autosave est puzzle_file in
@@ -105,8 +105,8 @@ let try_autosave auto_save_state est puzzle_file =
     let dynamic_interval = save_time *. 1000. in
     let next_interval = max auto_save_state.min_interval dynamic_interval in
     auto_save_state.next_save_time <- now +. next_interval;
-    Printf.printf "[Auto-save at %.0fs (next in %.0fs, save took %.1fs)]\n%!"
-      now next_interval save_time;
+    Printf.printf "[Auto-save at %s (next in %s, save took %.1fs)]\n%!"
+      (Table_logger.format_time 20 elapsed) (Table_logger.format_time 20 next_interval) save_time;
     true   (* saved *)
   ) else false   (* too soon, skip *)
 
@@ -189,7 +189,7 @@ let () =
   let solutions_file = solutions_file_path puzzle_file in
   let found_count = ref 0 in
   let out_ch = 
-    if was_resumed then open_out_gen [Open_append; Open_text] 0o644 solutions_file
+    if Sys.file_exists solutions_file then open_out_gen [Open_append; Open_text] 0o644 solutions_file
     else open_out solutions_file
   in
   let on_solution solution =
@@ -208,6 +208,9 @@ let () =
     )
   in
   
+  (* Elapsed time tracking *)
+  let start_time = Unix.gettimeofday () in
+  
   (* Setup progress table *)
   let table = make_table () in
   Table_logger.print_header table;
@@ -221,15 +224,7 @@ let () =
     total_samples := !total_samples + batch_size;
     
     (* Auto-save check (only between batches) *)
-    ignore (try_autosave auto_save_state estimator puzzle_file);
-    
-    (* Check for CTRL-C shutdown *)
-    if !shutting_down then (
-      ignore (try_autosave auto_save_state estimator puzzle_file);
-      Printf.printf "[Auto-save complete] State saved. Exiting.\n%!";
-      close_out out_ch;
-      exit 0
-    );
+    ignore (try_autosave auto_save_state estimator puzzle_file p.elapsed_seconds);
     
     (* Progress table update *)
     let est = Stochastic_estimator.estimates estimator in
@@ -262,7 +257,8 @@ let () =
   ) estimator;
   
   (* Final save on completion *)
-  ignore (try_autosave auto_save_state estimator puzzle_file);
+  let final_elapsed = Unix.gettimeofday () -. start_time in
+  ignore (try_autosave auto_save_state estimator puzzle_file final_elapsed);
   
   (* Final report *)
   let est = Stochastic_estimator.estimates estimator in
