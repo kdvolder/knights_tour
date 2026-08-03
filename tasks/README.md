@@ -22,8 +22,8 @@ The goal is to enhance the existing `stochastic_estimator.ml` module with:
 |---|------|--------|
 | 1 | [Solution Observation Callback](done/01-solution-observation-callback.md) | Done ✓ |
 | 2 | [Progress Monitoring & Logging](done/02-progress-monitoring-and-logging.md) | Done ✓ |
-| 3 | [State Serialization - Decision Path Encoding](03-state-serialization-decision-paths.md) | Not Started |
-| 4 | [State Deserialization - Tree Recreation](04-state-deserialization-tree-recreation.md) | Not Started |
+| 3 | [State Serialization - Decision Path Encoding](done/03-state-serialization-decision-paths.md) | Done ✓ |
+| 4 | [State Deserialization - Tree Recreation](done/04-state-deserialization-tree-recreation.md) | Done ✓ |
 | 5 | [Auto-save with Crash Resistance](05-auto-save-with-crash-resistance.md) | Not Started |
 | 6 | [Memory Management - Tree Pruning](done/06-memory-management-tree-pruning.md) | Done ✓ |
 | 7 | [Greedy Completion Selector](done/07-greedy-completion-selector.md) | Done ✓ |
@@ -47,7 +47,7 @@ Task 9 (CLI) - depends on all above              Task 10 (Gradual Braking Select
 ```
 
 - **Tasks 1-2**: Done — both modify the estimator API, implemented in parallel
-- **Task 3→4**: Serialization must come before deserialization (not started)
+- **Task 3→4**: Serialization + lazy deserialization — both done. Lazy views mean `load_state` triggers 0 inspections; all deferred until sampling resumes.
 - **Task 5**: Depends on Tasks 3+4 (needs serialization to save) — not started
 - **Task 6→7**: Pruning must come before greedy selector (selector needs pruning to be effective) — both done
 - **Task 8**: Depends on Task 6+7 — adaptive selection only makes sense if completed branches can be pruned and selector exists
