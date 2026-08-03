@@ -160,6 +160,7 @@ val save_state : string -> 'a t -> unit
 (** [save_state filename est] serializes the estimator's tree state to a file.
     The format is line-based with a version header. *)
 
-val load_state : 'a Searchspace.t -> string -> 'a t
-(** [load_state space filename] deserializes an estimator from a file saved by [save_state].
-    The search space must be provided to reconstruct the tree structure. *)
+val load_state : ?selector:'a child_selector -> ?on_solution:('a -> unit) -> 'a Searchspace.t -> string -> 'a t
+(** [load_state ?selector ?on_solution space filename] deserializes an estimator from a file saved by [save_state].
+    The search space must be provided to reconstruct the tree structure.
+    Optional [selector] and [on_solution] can be set on the loaded estimator. *)

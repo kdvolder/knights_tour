@@ -1484,7 +1484,7 @@ let replay_path (_space : 'a Searchspace.t) (root : 'a node) (entry : node_entry
       navigate root entry.path
 
 (* Load state from file and reconstruct estimator *)
-let load_state (space : 'a Searchspace.t) (filename : string) : 'a t =
+let load_state ?(selector = undersampled_selector) ?(on_solution = (fun _ -> ())) (space : 'a Searchspace.t) (filename : string) : 'a t =
   let ic = open_in filename in
   (* Read version header *)
   let first_line = try Some (input_line ic) with End_of_file -> None in
@@ -1514,7 +1514,7 @@ let load_state (space : 'a Searchspace.t) (filename : string) : 'a t =
           in
           loop ();
           
-          { root; selector = undersampled_selector; on_solution = (fun _ -> ()) }
+          { root; selector; on_solution }
       | ["version"; v] -> close_in ic; failwith ("Unsupported version: " ^ v)
       | _ -> close_in ic; failwith "Invalid file format: expected 'version N' as first line"
 
