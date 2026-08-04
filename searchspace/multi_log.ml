@@ -42,6 +42,7 @@ let make_logfile t level =
   let ch = open_out filename in
   output_string ch t.header;
   output_char ch '\n';
+  flush ch;
   {
     level;
     filename;
@@ -116,7 +117,8 @@ and add_line_to_file t level (target : logfile option ref) (line : string) : uni
   write_line_unconditional current line;
   if current.line_count > 100 then (
     compress_and_overflow t current
-  )
+  );
+  current.channel |> Option.iter flush
   
 let rec close_log_files current_ref =
   !current_ref |> Option.iter (fun current -> 
@@ -134,13 +136,16 @@ let add_line t = add_line_to_file t 0 t.first
 (* ============================================================================ *)
 
 let print_file_summary fname =
-  let lines = read_data_lines fname in
+  let lines = read_all_lines fname in
   Printf.printf "%s:\n---\n" fname;
   let show = List.take 5 lines in
   List.iter (fun l -> Printf.printf "%s\n" l) show;
   if List.length lines > 10 then (
     Printf.printf "...\n";
     let show = List.drop (List.length lines - 5) lines in
+    List.iter (fun l -> Printf.printf "%s\n" l) show
+  ) else (
+    let show = List.drop 5 lines in
     List.iter (fun l -> Printf.printf "%s\n" l) show
   );
   Printf.printf "---\n"
@@ -177,11 +182,11 @@ let%expect_test "multi_log many lines" =
   [%expect {|
     logs-2025-06-15-14-30-L0.csv:
     ---
+    level,batch,samples,nodes_est,fails_est,sols_est,found,materialized,pruned,net_nodes,pct_done,elapsed,eta
     line-1101
     line-1102
     line-1103
     line-1104
-    line-1105
     ...
     line-1196
     line-1197
@@ -191,11 +196,11 @@ let%expect_test "multi_log many lines" =
     ---
     logs-2025-06-15-14-30-L1.csv:
     ---
+    level,batch,samples,nodes_est,fails_est,sols_est,found,materialized,pruned,net_nodes,pct_done,elapsed,eta
     line-501
     line-511
     line-521
     line-531
-    line-541
     ...
     line-1051
     line-1061
@@ -205,10 +210,91 @@ let%expect_test "multi_log many lines" =
     ---
     logs-2025-06-15-14-30-L2.csv:
     ---
+    level,batch,samples,nodes_est,fails_est,sols_est,found,materialized,pruned,net_nodes,pct_done,elapsed,eta
     line-1
     line-101
     line-201
     line-301
     line-401
+    ---
+    |}]
+
+(* ============================================================================ *)
+(* Autoflush tests — validate files are written WITHOUT calling close           *)
+(* ============================================================================ *)
+
+let%expect_test "multi_log autoflush single line" =
+  let stamp = "2025-06-15-14-31" in
+  let existing = Sys.readdir "." |> Array.to_list |> List.filter (fun f ->
+    String.contains f 'L' && String.ends_with ~suffix:".csv" f
+  ) in
+  List.iter Sys.remove existing;
+  let header = "HEADER" in
+  let pipeline = create ~stamp ~header in
+  
+  (* Add a single line — no close yet *)
+  add_line pipeline "hello,world";
+  
+  (* Check file exists and has content WITHOUT calling close *)
+  let files = Sys.readdir "." |> Array.to_list |> List.filter (fun f ->
+    String.contains f 'L' && String.ends_with ~suffix:".csv" f
+  ) in
+  List.iter print_file_summary (List.sort String.compare files);
+  
+  (* Cleanup *)
+  List.iter Sys.remove files;
+  [%expect {|
+    logs-2025-06-15-14-31-L0.csv:
+    ---
+    HEADER
+    hello,world
+    ---
+    |}]
+
+let%expect_test "multi_log autoflush overflow" =
+  let stamp = "2025-06-15-14-32" in
+  let existing = Sys.readdir "." |> Array.to_list |> List.filter (fun f ->
+    String.contains f 'L' && String.ends_with ~suffix:".csv" f
+  ) in
+  List.iter Sys.remove existing;
+  let header = "col1,col2" in
+  let pipeline = create ~stamp ~header in
+  
+  (* Add 101 lines — triggers overflow at line 101, cascades ~5 to L1 *)
+  for i = 1 to 101 do
+    add_line pipeline (Printf.sprintf "line-%d" i)
+  done;
+  
+  (* Check BOTH files exist and are correct WITHOUT calling close *)
+  let files = Sys.readdir "." |> Array.to_list |> List.filter (fun f ->
+    String.contains f 'L' && String.ends_with ~suffix:".csv" f
+  ) in
+  List.iter print_file_summary (List.sort String.compare files);
+  
+  (* Cleanup *)
+  List.iter Sys.remove files;
+  [%expect {|
+    logs-2025-06-15-14-32-L0.csv:
+    ---
+    col1,col2
+    line-51
+    line-52
+    line-53
+    line-54
+    ...
+    line-97
+    line-98
+    line-99
+    line-100
+    line-101
+    ---
+    logs-2025-06-15-14-32-L1.csv:
+    ---
+    col1,col2
+    line-1
+    line-11
+    line-21
+    line-31
+    line-41
     ---
     |}]
