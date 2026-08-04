@@ -18,6 +18,7 @@
 type t = {
   stamp : string;
   header : string;
+  dir : string option;               (** Optional base directory for log files. *)
   first : logfile option ref;        (** First level (L0), chain via next fields. *)
 }
 
@@ -30,15 +31,20 @@ and logfile = {
   next : logfile option ref;              (** Next level, created lazily on overflow. *)
 }
 
-let create ~stamp ~header = {
+let create ~stamp ~header ?dir () = {
   stamp;
   header;
+  dir;
   first = ref None;
 }
 
 (** Create a logfile for the given level, writing the header line. *)
 let make_logfile t level =
-  let filename = Printf.sprintf "logs-%s-L%d.csv" t.stamp level in
+  let basename = Printf.sprintf "logs-%s-L%d.csv" t.stamp level in
+  let filename = match t.dir with
+    | None -> basename
+    | Some d -> Filename.concat d basename
+  in
   let ch = open_out filename in
   output_string ch t.header;
   output_char ch '\n';
@@ -162,7 +168,7 @@ let%expect_test "multi_log many lines" =
   ) in
   List.iter Sys.remove existing;
   let header = "level,batch,samples,nodes_est,fails_est,sols_est,found,materialized,pruned,net_nodes,pct_done,elapsed,eta" in
-  let pipeline = create ~stamp ~header in
+  let pipeline = create ~stamp ~header () in
   
   (* Shove 1250 lines into L0 — triggers overflow at line 101, cascades ~5 to L1 *)
   for i = 1 to 1200 do
@@ -230,7 +236,7 @@ let%expect_test "multi_log autoflush single line" =
   ) in
   List.iter Sys.remove existing;
   let header = "HEADER" in
-  let pipeline = create ~stamp ~header in
+  let pipeline = create ~stamp ~header () in
   
   (* Add a single line — no close yet *)
   add_line pipeline "hello,world";
@@ -258,7 +264,7 @@ let%expect_test "multi_log autoflush overflow" =
   ) in
   List.iter Sys.remove existing;
   let header = "col1,col2" in
-  let pipeline = create ~stamp ~header in
+  let pipeline = create ~stamp ~header () in
   
   (* Add 101 lines — triggers overflow at line 101, cascades ~5 to L1 *)
   for i = 1 to 101 do

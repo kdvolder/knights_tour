@@ -15,11 +15,13 @@ type t
 (** Create a new cycling log pipeline.
 
     All levels share the same CSV [header] line. No files are created yet —
-    L0 is instantiated lazily on the first [add_line]. The [stamp] is used
-    in filenames: [logs-<stamp>-L0.csv], [logs-<stamp>-L1.csv], etc.
+    L0 is instantiated lazily on the first [add_line]. Files are written to
+    [dir] (if given) with names like [logs-<stamp>-L0.csv],
+    [logs-<stamp>-L1.csv], etc. When omitted, files are written to the
+    current directory.
     The stamp should match the session start timestamp (same as used for
     solution files). *)
-val create : stamp:string -> header:string -> t
+val create : stamp:string -> header:string -> ?dir:string -> unit -> t
 
 (** Add a line to the pipeline (appended to L0).
 
