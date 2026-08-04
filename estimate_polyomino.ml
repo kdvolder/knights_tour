@@ -47,16 +47,18 @@ let parse_args () =
 (* File Path Utilities (relative to puzzle file directory)                     *)
 (* ============================================================================ *)
 
-let solutions_file_path puzzle_file =
+let session_stamp () =
   let today = Unix.localtime (Unix.time ()) in
-  let day = today.tm_mday in
-  let month = today.tm_mon + 1 in
-  let year = today.tm_year + 1900 in
-  let hour = today.tm_hour in
-  let min = today.tm_min in
-  let timestamp = Printf.sprintf "%04d-%02d-%02d-%02d-%02d" year month day hour min in
+  Printf.sprintf "%04d-%02d-%02d-%02d-%02d" (today.tm_year + 1900) (today.tm_mon + 1)
+    today.tm_mday today.tm_hour today.tm_min
+
+let solutions_file_path puzzle_file =
+  let stamp = session_stamp () in
   let dir = Filename.dirname puzzle_file in
-  Filename.concat dir (Printf.sprintf "solutions-%s.txt" timestamp)
+  Filename.concat dir (Printf.sprintf "solutions-%s.txt" stamp)
+
+let multi_log_header =
+  "Batch,Samples,Nodes Est,Fails Est,Sols Est,Found,Materialized,Pruned,Net Nodes,%Done,Elapsed,ETA"
 
 let autosave_path puzzle_file =
   let dir = Filename.dirname puzzle_file in
@@ -153,9 +155,28 @@ let make_table () =
 (* Main Function with Resume, Auto-Save, and CTRL-C Handling                   *)
 (* ============================================================================ *)
 
+let format_log_line r =
+  Printf.sprintf "%d,%d,%.17g,%.17g,%.17g,%d,%d,%d,%d,%.17g,%s,%s"
+    r.batch
+    r.total_samples
+    r.nodes_est
+    r.fails_est
+    r.sols_est
+    r.found
+    r.materialized
+    r.pruned
+    r.net_nodes
+    r.completion_ratio
+    (Table_logger.format_time 20 r.elapsed_seconds)
+    (Table_logger.format_time 20 r.eta_seconds)
+
 let () =
   (* Parse CLI arguments *)
   let puzzle_file, no_resume, min_save_interval, batch_size = parse_args () in
+  
+  (* Create multi-resolution log pipeline (next to puzzle file) *)
+  let log_dir = Filename.dirname puzzle_file in
+  let pipeline = Multi_log.create ~stamp:(session_stamp ()) ~header:multi_log_header ~dir:log_dir () in
   
   (* Load puzzle *)
   let puzzle = In_channel.with_open_text puzzle_file Puzzle.load in
@@ -248,6 +269,8 @@ let () =
       Printf.printf "\n%!";
       Table_logger.print_header table
     end;
+    (* Write to multi-resolution log *)
+    Multi_log.add_line pipeline (format_log_line row);
     not !shutting_down
   ) estimator;
   
@@ -258,6 +281,7 @@ let () =
   if !shutting_down then (
     if saved then Printf.printf "[Auto-save complete] State saved. Exiting.\n%!"
     else Printf.printf "[Shutdown] No autosave (interval not reached). Exiting.\n%!";
+    Multi_log.close pipeline;
     close_out out_ch;
     exit 0
   );
@@ -267,4 +291,5 @@ let () =
   Printf.printf "\nDone! Final estimates: nodes=%.0e, fails=%.0e, solutions=%.1f\n" 
     est.nodes est.fails est.solutions;
   
+  Multi_log.close pipeline;
   close_out out_ch
