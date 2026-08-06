@@ -166,10 +166,10 @@ let format_time w seconds =
             let m = (rem mod 3600) / 60 in
             let s = rem mod 60 in
             if h = 0 && m = 0 then string_of_int d ^ " day" ^ (if d > 1 then "s" else "")
-            else if s = 0 && m = 0 then string_of_int d ^ " day" ^ (if d > 1 then "s" else "") ^ ", " ^ string_of_int h ^ " h"
-            else if m = 0 then string_of_int d ^ " day" ^ (if d > 1 then "s" else "") ^ ", " ^ string_of_int h ^ " h " ^ string_of_int s ^ " s"
-            else if s = 0 then string_of_int d ^ " day" ^ (if d > 1 then "s" else "") ^ ", " ^ string_of_int h ^ " h " ^ string_of_int m ^ " min"
-            else string_of_int d ^ " day" ^ (if d > 1 then "s" else "") ^ ", " ^ string_of_int h ^ " h " ^ string_of_int m ^ " min " ^ string_of_int s ^ " s"
+            else if s = 0 && m = 0 then string_of_int d ^ " day" ^ (if d > 1 then "s" else "") ^ " " ^ string_of_int h ^ " h"
+            else if m = 0 then string_of_int d ^ " day" ^ (if d > 1 then "s" else "") ^ " " ^ string_of_int h ^ " h " ^ string_of_int s ^ " s"
+            else if s = 0 then string_of_int d ^ " day" ^ (if d > 1 then "s" else "") ^ " " ^ string_of_int h ^ " h " ^ string_of_int m ^ " min"
+            else string_of_int d ^ " day" ^ (if d > 1 then "s" else "") ^ " " ^ string_of_int h ^ " h " ^ string_of_int m ^ " min " ^ string_of_int s ^ " s"
         else
           let years = float_of_int (total / 31536000) in
           if years > 1e9 then Printf.sprintf "%.5g years" years
@@ -486,7 +486,7 @@ let%expect_test "format_time: days" =
   Printf.printf "25s: |%s|\n" (format_time 25 150125.0);
   [%expect{|
     15s: |          1 day|
-    25s: |   1 day, 17 h 42 min 5 s|
+    25s: |    1 day 17 h 42 min 5 s|
     |}]
 
 let%expect_test "format_time: years" =
@@ -502,15 +502,15 @@ let%expect_test "format_time: width truncation" =
     Printf.printf "width %d: |%s|\n" i (format_time i 150125.0)
   done;
   [%expect{|
-    width 15: |1 day, 17 h 42…|
-    width 14: |1 day, 17 h 4…|
-    width 13: |1 day, 17 h …|
-    width 12: |1 day, 17 h…|
-    width 11: |1 day, 17 …|
-    width 10: |1 day, 17…|
-    width 9: |1 day, 1…|
-    width 8: |1 day, …|
-    width 7: |1 day,…|
+    width 15: |1 day 17 h 42 …|
+    width 14: |1 day 17 h 42…|
+    width 13: |1 day 17 h 4…|
+    width 12: |1 day 17 h …|
+    width 11: |1 day 17 h…|
+    width 10: |1 day 17 …|
+    width 9: |1 day 17…|
+    width 8: |1 day 1…|
+    width 7: |1 day …|
     width 6: |1 day…|
     width 5: |1 da…|
     width 4: |1 d…|
