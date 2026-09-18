@@ -318,6 +318,28 @@ let greedy_completion_selector _ (node : 'a node) : int =
     let candidates = List.filter (fun i -> abs_float (rates.(i) -. min_rate) < 1e-8) (List.init n Fun.id) in
     List.nth candidates (Random.int (List.length candidates))
 
+(** Solution density score for greedy_solution_selector.
+    Completed children → -2.0 (never pick unless all completed)
+    Unexplored (None or samples=0) → -1.0
+    Explored with samples > 0 → solution_estimate / (fail_estimate + solution_estimate) *)
+let greedy_solution_rate child = match child with
+  | Some child ->
+      if child.isCompleted then -2.0
+      else if child.samples = 0 then -1.0
+      else child.solution_estimate /. (child.fail_estimate +. child.solution_estimate)
+  | None -> -1.0
+
+(** Select child with highest solution density.
+    Greedy for solutions rather than greedy for completion. *)
+let greedy_solution_selector _ (node : 'a node) : int =
+  let n = Array.length node.children in
+  if n = 0 then 0
+  else
+    let rates = Array.init n (fun i -> greedy_solution_rate node.children.(i)) in
+    let max_rate = Array.fold_left max rates.(0) rates in
+    let candidates = List.filter (fun i -> rates.(i) = max_rate) (List.init n Fun.id) in
+    List.nth candidates (Random.int (List.length candidates))
+
 let rec walk select_child on_solution (node : 'a node) : unit =
 	match Lazy.force node.node_view with
 	| Fail -> ()
@@ -911,11 +933,19 @@ end
 (* Play-around test: simple search space to inspect pruning propagation *)
 let rec print_tree indent (node : 'a node) =
   let pruned_marker = if Array.length node.children = 0 && node.isCompleted then " **PRUNED**" else "" in
+  let density =
+    if node.isCompleted then ""
+    else if node.samples > 0 && (node.fail_estimate +. node.solution_estimate) > 0. then
+      Printf.sprintf " density=%.4e" (node.solution_estimate /. (node.fail_estimate +. node.solution_estimate))
+    else ""
+  in
   let output = indent ^ "Fork [samples=" ^ string_of_int node.samples 
                           ^ " nodes=" ^ string_of_float node.nodes_estimate
+                          ^ " fails=" ^ string_of_float node.fail_estimate
+                          ^ " sols=" ^ string_of_float node.solution_estimate
                           ^ " completed=" ^ string_of_bool node.isCompleted 
                           ^ " materialized=" ^ string_of_int node.materialized_nodes 
-                          ^ " pruned=" ^ string_of_int node.pruned_nodes ^ "]" ^ pruned_marker in
+                          ^ " pruned=" ^ string_of_int node.pruned_nodes ^ "]" ^ density ^ pruned_marker in
   Printf.printf "%s\n" output;
   Array.iteri (fun i child_opt ->
     match child_opt with
@@ -944,24 +974,24 @@ let%expect_test "debug: pick two numbers 1..3, sum > 4" = begin
   print_tree "" est.root;
   [%expect{|
     === Before sampling ===
-    Fork [samples=0 nodes=1. completed=false materialized=1 pruned=0]
+    Fork [samples=0 nodes=1. fails=0. sols=0. completed=false materialized=1 pruned=0]
       Child 0: not materialized
       Child 1: not materialized
       Child 2: not materialized
 
     === After 8 samples ===
-    Fork [samples=8 nodes=13. completed=false materialized=12 pruned=6]
+    Fork [samples=8 nodes=13. fails=5. sols=4. completed=false materialized=12 pruned=6] density=4.4444e-01
       Child 0:
-        Fork [samples=3 nodes=4. completed=true materialized=4 pruned=3] **PRUNED**
+        Fork [samples=3 nodes=4. fails=3. sols=0. completed=true materialized=4 pruned=3] **PRUNED**
       Child 1:
-        Fork [samples=3 nodes=4. completed=true materialized=4 pruned=3] **PRUNED**
+        Fork [samples=3 nodes=4. fails=2. sols=1. completed=true materialized=4 pruned=3] **PRUNED**
       Child 2:
-        Fork [samples=2 nodes=4. completed=false materialized=3 pruned=0]
+        Fork [samples=2 nodes=4. fails=0. sols=3. completed=false materialized=3 pruned=0] density=1.0000e+00
           Child 0: not materialized
           Child 1:
-            Fork [samples=1 nodes=1. completed=true materialized=1 pruned=0] **PRUNED**
+            Fork [samples=1 nodes=1. fails=0. sols=1. completed=true materialized=1 pruned=0] **PRUNED**
           Child 2:
-            Fork [samples=1 nodes=1. completed=true materialized=1 pruned=0] **PRUNED**
+            Fork [samples=1 nodes=1. fails=0. sols=1. completed=true materialized=1 pruned=0] **PRUNED**
     |}]
 end
 
@@ -986,7 +1016,7 @@ let%expect_test "oversampling is fine" = begin
     === solutions ===
     6; 5; 5;
     ===== tree ====
-    Fork [samples=9 nodes=13. completed=true materialized=13 pruned=12] **PRUNED**
+    Fork [samples=9 nodes=13. fails=6. sols=3. completed=true materialized=13 pruned=12] **PRUNED**
     |}]
 end
 
@@ -1012,100 +1042,470 @@ let%expect_test "greedy_completion_selector: step-by-step inspection" = begin
   done;
   [%expect{|
     === Before sampling ===
-    Fork [samples=0 nodes=1. completed=false materialized=1 pruned=0]
+    Fork [samples=0 nodes=1. fails=0. sols=0. completed=false materialized=1 pruned=0]
       Child 0: not materialized
       Child 1: not materialized
       Child 2: not materialized
 
     === After 1 samples ===
-    Fork [samples=1 nodes=13. completed=false materialized=3 pruned=0]
+    Fork [samples=1 nodes=13. fails=9. sols=0. completed=false materialized=3 pruned=0] density=0.0000e+00
       Child 0: not materialized
       Child 1:
-        Fork [samples=1 nodes=4. completed=false materialized=2 pruned=0]
+        Fork [samples=1 nodes=4. fails=3. sols=0. completed=false materialized=2 pruned=0] density=0.0000e+00
           Child 0: not materialized
           Child 1:
-            Fork [samples=1 nodes=1. completed=true materialized=1 pruned=0] **PRUNED**
+            Fork [samples=1 nodes=1. fails=1. sols=0. completed=true materialized=1 pruned=0] **PRUNED**
           Child 2: not materialized
       Child 2: not materialized
 
     === After 2 samples ===
-    Fork [samples=2 nodes=13. completed=false materialized=4 pruned=0]
+    Fork [samples=2 nodes=13. fails=9. sols=0. completed=false materialized=4 pruned=0] density=0.0000e+00
       Child 0: not materialized
       Child 1:
-        Fork [samples=2 nodes=4. completed=false materialized=3 pruned=0]
+        Fork [samples=2 nodes=4. fails=3. sols=0. completed=false materialized=3 pruned=0] density=0.0000e+00
           Child 0:
-            Fork [samples=1 nodes=1. completed=true materialized=1 pruned=0] **PRUNED**
+            Fork [samples=1 nodes=1. fails=1. sols=0. completed=true materialized=1 pruned=0] **PRUNED**
           Child 1:
-            Fork [samples=1 nodes=1. completed=true materialized=1 pruned=0] **PRUNED**
+            Fork [samples=1 nodes=1. fails=1. sols=0. completed=true materialized=1 pruned=0] **PRUNED**
           Child 2: not materialized
       Child 2: not materialized
 
     === After 3 samples ===
-    Fork [samples=3 nodes=13. completed=false materialized=5 pruned=3]
+    Fork [samples=3 nodes=13. fails=6. sols=3. completed=false materialized=5 pruned=3] density=3.3333e-01
       Child 0: not materialized
       Child 1:
-        Fork [samples=3 nodes=4. completed=true materialized=4 pruned=3] **PRUNED**
+        Fork [samples=3 nodes=4. fails=2. sols=1. completed=true materialized=4 pruned=3] **PRUNED**
       Child 2: not materialized
 
     === After 4 samples ===
-    Fork [samples=4 nodes=13. completed=false materialized=7 pruned=3]
+    Fork [samples=4 nodes=13. fails=7.5 sols=1.5 completed=false materialized=7 pruned=3] density=1.6667e-01
       Child 0:
-        Fork [samples=1 nodes=4. completed=false materialized=2 pruned=0]
+        Fork [samples=1 nodes=4. fails=3. sols=0. completed=false materialized=2 pruned=0] density=0.0000e+00
           Child 0: not materialized
           Child 1:
-            Fork [samples=1 nodes=1. completed=true materialized=1 pruned=0] **PRUNED**
+            Fork [samples=1 nodes=1. fails=1. sols=0. completed=true materialized=1 pruned=0] **PRUNED**
           Child 2: not materialized
       Child 1:
-        Fork [samples=3 nodes=4. completed=true materialized=4 pruned=3] **PRUNED**
+        Fork [samples=3 nodes=4. fails=2. sols=1. completed=true materialized=4 pruned=3] **PRUNED**
       Child 2: not materialized
 
     === After 5 samples ===
-    Fork [samples=5 nodes=13. completed=false materialized=8 pruned=3]
+    Fork [samples=5 nodes=13. fails=7.5 sols=1.5 completed=false materialized=8 pruned=3] density=1.6667e-01
       Child 0:
-        Fork [samples=2 nodes=4. completed=false materialized=3 pruned=0]
+        Fork [samples=2 nodes=4. fails=3. sols=0. completed=false materialized=3 pruned=0] density=0.0000e+00
           Child 0:
-            Fork [samples=1 nodes=1. completed=true materialized=1 pruned=0] **PRUNED**
+            Fork [samples=1 nodes=1. fails=1. sols=0. completed=true materialized=1 pruned=0] **PRUNED**
           Child 1:
-            Fork [samples=1 nodes=1. completed=true materialized=1 pruned=0] **PRUNED**
+            Fork [samples=1 nodes=1. fails=1. sols=0. completed=true materialized=1 pruned=0] **PRUNED**
           Child 2: not materialized
       Child 1:
-        Fork [samples=3 nodes=4. completed=true materialized=4 pruned=3] **PRUNED**
+        Fork [samples=3 nodes=4. fails=2. sols=1. completed=true materialized=4 pruned=3] **PRUNED**
       Child 2: not materialized
 
     === After 6 samples ===
-    Fork [samples=6 nodes=13. completed=false materialized=9 pruned=6]
+    Fork [samples=6 nodes=13. fails=7.5 sols=1.5 completed=false materialized=9 pruned=6] density=1.6667e-01
       Child 0:
-        Fork [samples=3 nodes=4. completed=true materialized=4 pruned=3] **PRUNED**
+        Fork [samples=3 nodes=4. fails=3. sols=0. completed=true materialized=4 pruned=3] **PRUNED**
       Child 1:
-        Fork [samples=3 nodes=4. completed=true materialized=4 pruned=3] **PRUNED**
+        Fork [samples=3 nodes=4. fails=2. sols=1. completed=true materialized=4 pruned=3] **PRUNED**
       Child 2: not materialized
 
     === After 7 samples ===
-    Fork [samples=7 nodes=13. completed=false materialized=11 pruned=6]
+    Fork [samples=7 nodes=13. fails=8. sols=1. completed=false materialized=11 pruned=6] density=1.1111e-01
       Child 0:
-        Fork [samples=3 nodes=4. completed=true materialized=4 pruned=3] **PRUNED**
+        Fork [samples=3 nodes=4. fails=3. sols=0. completed=true materialized=4 pruned=3] **PRUNED**
       Child 1:
-        Fork [samples=3 nodes=4. completed=true materialized=4 pruned=3] **PRUNED**
+        Fork [samples=3 nodes=4. fails=2. sols=1. completed=true materialized=4 pruned=3] **PRUNED**
       Child 2:
-        Fork [samples=1 nodes=4. completed=false materialized=2 pruned=0]
+        Fork [samples=1 nodes=4. fails=3. sols=0. completed=false materialized=2 pruned=0] density=0.0000e+00
           Child 0:
-            Fork [samples=1 nodes=1. completed=true materialized=1 pruned=0] **PRUNED**
+            Fork [samples=1 nodes=1. fails=1. sols=0. completed=true materialized=1 pruned=0] **PRUNED**
           Child 1: not materialized
           Child 2: not materialized
 
     === After 8 samples ===
-    Fork [samples=8 nodes=13. completed=false materialized=12 pruned=6]
+    Fork [samples=8 nodes=13. fails=6.5 sols=2.5 completed=false materialized=12 pruned=6] density=2.7778e-01
       Child 0:
-        Fork [samples=3 nodes=4. completed=true materialized=4 pruned=3] **PRUNED**
+        Fork [samples=3 nodes=4. fails=3. sols=0. completed=true materialized=4 pruned=3] **PRUNED**
       Child 1:
-        Fork [samples=3 nodes=4. completed=true materialized=4 pruned=3] **PRUNED**
+        Fork [samples=3 nodes=4. fails=2. sols=1. completed=true materialized=4 pruned=3] **PRUNED**
       Child 2:
-        Fork [samples=2 nodes=4. completed=false materialized=3 pruned=0]
+        Fork [samples=2 nodes=4. fails=1.5 sols=1.5 completed=false materialized=3 pruned=0] density=5.0000e-01
           Child 0:
-            Fork [samples=1 nodes=1. completed=true materialized=1 pruned=0] **PRUNED**
+            Fork [samples=1 nodes=1. fails=1. sols=0. completed=true materialized=1 pruned=0] **PRUNED**
           Child 1: not materialized
           Child 2:
-            Fork [samples=1 nodes=1. completed=true materialized=1 pruned=0] **PRUNED**
+            Fork [samples=1 nodes=1. fails=0. sols=1. completed=true materialized=1 pruned=0] **PRUNED**
+    |}]
+end
+
+let%expect_test "greedy_solution: step-by-step inspection" = begin
+  (* Create a search space where greedy_solution_selector makes density-based choices:
+     - Child 0: small subtree, low density (mostly dead ends)
+     - Child 1: medium subtree, medium density
+     - Child 2: large subtree, high density (many solutions)
+     
+     Use a switchable selector so we can:
+     1. Spread sampling with undersampled first
+     2. Switch to greedy_solution_selector and see density-based choices
+     3. Compare with greedy_completion_selector on the same tree state *)
+  let num = of_list [1;2;3] in
+  (* Child 0: pick from [1..3], sum > 4 — only (2,3),(3,2),(3,3) work = 3/9 solutions *)
+  let small_low_density =
+     num |=> (fun x -> 
+       num |=> (fun y -> 
+        return ("a" ^ string_of_int x ^ string_of_int y)
+       )
+     ) 
+     |?> (fun s -> String.length s > 4) in
+  (* Child 1: pick from [1..3], sum >= 2 && <= 5 — some solutions *)
+  let medium_density =
+     num |=> (fun x -> 
+       num |=> (fun y -> 
+        return ("b" ^ string_of_int x ^ string_of_int y)
+       )
+     ) 
+     |?> (fun s -> String.length s >= 2 && String.length s <= 5) in
+  (* Child 2: pick from [1..3] three times, sum >= 4 && <= 7 — many solutions *)
+  let large_high_density =
+     num |=> (fun x -> 
+       num |=> (fun y -> 
+         num |=> (fun z ->
+           return ("c" ^ string_of_int x ^ string_of_int y ^ string_of_int z)
+         )
+       )
+     ) 
+     |?> (fun s -> String.length s >= 4 && String.length s <= 7) in
+  let space =
+     alt [small_low_density; medium_density; large_high_density]
+  in
+  (* Switchable selector: holds a ref we can swap mid-run *)
+  let current_selector = ref (fun _est _node -> 0) in
+  let switchable_sel est node = !current_selector est node in
+  current_selector := undersampled_selector;
+  let est = create ~selector:switchable_sel space in
+  Random.full_init [|42|];
+  
+  Printf.printf "=== Phase 1: undersampled — spread across branches ===\n";
+  print_tree "" est.root;
+  
+  let phase1_samples = 5 in
+  ignore (sample phase1_samples est);
+  Printf.printf "\n=== After %d samples ===\n" phase1_samples;
+  print_tree "" est.root;
+  
+  Printf.printf "\n=== Phase 2: switch to greedy_solution_selector ===\n";
+  current_selector := greedy_solution_selector;
+  
+  for batch = 1 to 5 do
+    ignore (sample 1 est);
+    if batch = 1 || batch mod 5 = 0 then begin
+      Printf.printf "\n=== After %d samples ===\n" batch;
+      print_tree "" est.root
+    end
+  done;
+  
+  Printf.printf "\n=== Phase 3: switch to greedy_completion_selector ===\n";
+  current_selector := greedy_completion_selector;
+  
+  for batch = 1 to 5 do
+    ignore (sample 1 est);
+    if batch = 1 || batch mod 5 = 0 then begin
+      Printf.printf "\n=== After %d samples ===\n" batch;
+      print_tree "" est.root
+    end
+  done;
+  [%expect{|
+    === Phase 1: undersampled — spread across branches ===
+    Fork [samples=0 nodes=1. fails=0. sols=0. completed=false materialized=1 pruned=0]
+      Child 0: not materialized
+      Child 1: not materialized
+      Child 2: not materialized
+
+    === After 5 samples ===
+    Fork [samples=5 nodes=67. fails=9. sols=36. completed=false materialized=17 pruned=0] density=8.0000e-01
+      Child 0:
+        Fork [samples=1 nodes=13. fails=9. sols=0. completed=false materialized=3 pruned=0] density=0.0000e+00
+          Child 0:
+            Fork [samples=1 nodes=4. fails=3. sols=0. completed=false materialized=2 pruned=0] density=0.0000e+00
+              Child 0:
+                Fork [samples=1 nodes=1. fails=1. sols=0. completed=true materialized=1 pruned=0] **PRUNED**
+              Child 1: not materialized
+              Child 2: not materialized
+          Child 1: not materialized
+          Child 2: not materialized
+      Child 1:
+        Fork [samples=1 nodes=13. fails=0. sols=9. completed=false materialized=3 pruned=0] density=1.0000e+00
+          Child 0: not materialized
+          Child 1:
+            Fork [samples=1 nodes=4. fails=0. sols=3. completed=false materialized=2 pruned=0] density=1.0000e+00
+              Child 0: not materialized
+              Child 1:
+                Fork [samples=1 nodes=1. fails=0. sols=1. completed=true materialized=1 pruned=0] **PRUNED**
+              Child 2: not materialized
+          Child 2: not materialized
+      Child 2:
+        Fork [samples=3 nodes=40. fails=0. sols=27. completed=false materialized=10 pruned=0] density=1.0000e+00
+          Child 0:
+            Fork [samples=1 nodes=13. fails=0. sols=9. completed=false materialized=3 pruned=0] density=1.0000e+00
+              Child 0: not materialized
+              Child 1:
+                Fork [samples=1 nodes=4. fails=0. sols=3. completed=false materialized=2 pruned=0] density=1.0000e+00
+                  Child 0:
+                    Fork [samples=1 nodes=1. fails=0. sols=1. completed=true materialized=1 pruned=0] **PRUNED**
+                  Child 1: not materialized
+                  Child 2: not materialized
+              Child 2: not materialized
+          Child 1:
+            Fork [samples=1 nodes=13. fails=0. sols=9. completed=false materialized=3 pruned=0] density=1.0000e+00
+              Child 0: not materialized
+              Child 1:
+                Fork [samples=1 nodes=4. fails=0. sols=3. completed=false materialized=2 pruned=0] density=1.0000e+00
+                  Child 0: not materialized
+                  Child 1:
+                    Fork [samples=1 nodes=1. fails=0. sols=1. completed=true materialized=1 pruned=0] **PRUNED**
+                  Child 2: not materialized
+              Child 2: not materialized
+          Child 2:
+            Fork [samples=1 nodes=13. fails=0. sols=9. completed=false materialized=3 pruned=0] density=1.0000e+00
+              Child 0:
+                Fork [samples=1 nodes=4. fails=0. sols=3. completed=false materialized=2 pruned=0] density=1.0000e+00
+                  Child 0:
+                    Fork [samples=1 nodes=1. fails=0. sols=1. completed=true materialized=1 pruned=0] **PRUNED**
+                  Child 1: not materialized
+                  Child 2: not materialized
+              Child 1: not materialized
+              Child 2: not materialized
+
+    === Phase 2: switch to greedy_solution_selector ===
+
+    === After 1 samples ===
+    Fork [samples=6 nodes=67. fails=9. sols=36. completed=false materialized=18 pruned=0] density=8.0000e-01
+      Child 0:
+        Fork [samples=1 nodes=13. fails=9. sols=0. completed=false materialized=3 pruned=0] density=0.0000e+00
+          Child 0:
+            Fork [samples=1 nodes=4. fails=3. sols=0. completed=false materialized=2 pruned=0] density=0.0000e+00
+              Child 0:
+                Fork [samples=1 nodes=1. fails=1. sols=0. completed=true materialized=1 pruned=0] **PRUNED**
+              Child 1: not materialized
+              Child 2: not materialized
+          Child 1: not materialized
+          Child 2: not materialized
+      Child 1:
+        Fork [samples=1 nodes=13. fails=0. sols=9. completed=false materialized=3 pruned=0] density=1.0000e+00
+          Child 0: not materialized
+          Child 1:
+            Fork [samples=1 nodes=4. fails=0. sols=3. completed=false materialized=2 pruned=0] density=1.0000e+00
+              Child 0: not materialized
+              Child 1:
+                Fork [samples=1 nodes=1. fails=0. sols=1. completed=true materialized=1 pruned=0] **PRUNED**
+              Child 2: not materialized
+          Child 2: not materialized
+      Child 2:
+        Fork [samples=4 nodes=40. fails=0. sols=27. completed=false materialized=11 pruned=0] density=1.0000e+00
+          Child 0:
+            Fork [samples=2 nodes=13. fails=0. sols=9. completed=false materialized=4 pruned=0] density=1.0000e+00
+              Child 0: not materialized
+              Child 1:
+                Fork [samples=2 nodes=4. fails=0. sols=3. completed=false materialized=3 pruned=0] density=1.0000e+00
+                  Child 0:
+                    Fork [samples=1 nodes=1. fails=0. sols=1. completed=true materialized=1 pruned=0] **PRUNED**
+                  Child 1:
+                    Fork [samples=1 nodes=1. fails=0. sols=1. completed=true materialized=1 pruned=0] **PRUNED**
+                  Child 2: not materialized
+              Child 2: not materialized
+          Child 1:
+            Fork [samples=1 nodes=13. fails=0. sols=9. completed=false materialized=3 pruned=0] density=1.0000e+00
+              Child 0: not materialized
+              Child 1:
+                Fork [samples=1 nodes=4. fails=0. sols=3. completed=false materialized=2 pruned=0] density=1.0000e+00
+                  Child 0: not materialized
+                  Child 1:
+                    Fork [samples=1 nodes=1. fails=0. sols=1. completed=true materialized=1 pruned=0] **PRUNED**
+                  Child 2: not materialized
+              Child 2: not materialized
+          Child 2:
+            Fork [samples=1 nodes=13. fails=0. sols=9. completed=false materialized=3 pruned=0] density=1.0000e+00
+              Child 0:
+                Fork [samples=1 nodes=4. fails=0. sols=3. completed=false materialized=2 pruned=0] density=1.0000e+00
+                  Child 0:
+                    Fork [samples=1 nodes=1. fails=0. sols=1. completed=true materialized=1 pruned=0] **PRUNED**
+                  Child 1: not materialized
+                  Child 2: not materialized
+              Child 1: not materialized
+              Child 2: not materialized
+
+    === After 5 samples ===
+    Fork [samples=10 nodes=67. fails=9. sols=36. completed=false materialized=23 pruned=3] density=8.0000e-01
+      Child 0:
+        Fork [samples=1 nodes=13. fails=9. sols=0. completed=false materialized=3 pruned=0] density=0.0000e+00
+          Child 0:
+            Fork [samples=1 nodes=4. fails=3. sols=0. completed=false materialized=2 pruned=0] density=0.0000e+00
+              Child 0:
+                Fork [samples=1 nodes=1. fails=1. sols=0. completed=true materialized=1 pruned=0] **PRUNED**
+              Child 1: not materialized
+              Child 2: not materialized
+          Child 1: not materialized
+          Child 2: not materialized
+      Child 1:
+        Fork [samples=2 nodes=13. fails=0. sols=9. completed=false materialized=4 pruned=0] density=1.0000e+00
+          Child 0: not materialized
+          Child 1:
+            Fork [samples=2 nodes=4. fails=0. sols=3. completed=false materialized=3 pruned=0] density=1.0000e+00
+              Child 0: not materialized
+              Child 1:
+                Fork [samples=1 nodes=1. fails=0. sols=1. completed=true materialized=1 pruned=0] **PRUNED**
+              Child 2:
+                Fork [samples=1 nodes=1. fails=0. sols=1. completed=true materialized=1 pruned=0] **PRUNED**
+          Child 2: not materialized
+      Child 2:
+        Fork [samples=7 nodes=40. fails=0. sols=27. completed=false materialized=15 pruned=3] density=1.0000e+00
+          Child 0:
+            Fork [samples=4 nodes=13. fails=0. sols=9. completed=false materialized=7 pruned=3] density=1.0000e+00
+              Child 0: not materialized
+              Child 1:
+                Fork [samples=3 nodes=4. fails=0. sols=3. completed=true materialized=4 pruned=3] **PRUNED**
+              Child 2:
+                Fork [samples=1 nodes=4. fails=0. sols=3. completed=false materialized=2 pruned=0] density=1.0000e+00
+                  Child 0: not materialized
+                  Child 1: not materialized
+                  Child 2:
+                    Fork [samples=1 nodes=1. fails=0. sols=1. completed=true materialized=1 pruned=0] **PRUNED**
+          Child 1:
+            Fork [samples=1 nodes=13. fails=0. sols=9. completed=false materialized=3 pruned=0] density=1.0000e+00
+              Child 0: not materialized
+              Child 1:
+                Fork [samples=1 nodes=4. fails=0. sols=3. completed=false materialized=2 pruned=0] density=1.0000e+00
+                  Child 0: not materialized
+                  Child 1:
+                    Fork [samples=1 nodes=1. fails=0. sols=1. completed=true materialized=1 pruned=0] **PRUNED**
+                  Child 2: not materialized
+              Child 2: not materialized
+          Child 2:
+            Fork [samples=2 nodes=13. fails=0. sols=9. completed=false materialized=4 pruned=0] density=1.0000e+00
+              Child 0:
+                Fork [samples=2 nodes=4. fails=0. sols=3. completed=false materialized=3 pruned=0] density=1.0000e+00
+                  Child 0:
+                    Fork [samples=1 nodes=1. fails=0. sols=1. completed=true materialized=1 pruned=0] **PRUNED**
+                  Child 1: not materialized
+                  Child 2:
+                    Fork [samples=1 nodes=1. fails=0. sols=1. completed=true materialized=1 pruned=0] **PRUNED**
+              Child 1: not materialized
+              Child 2: not materialized
+
+    === Phase 3: switch to greedy_completion_selector ===
+
+    === After 1 samples ===
+    Fork [samples=11 nodes=67. fails=9. sols=36. completed=false materialized=24 pruned=6] density=8.0000e-01
+      Child 0:
+        Fork [samples=1 nodes=13. fails=9. sols=0. completed=false materialized=3 pruned=0] density=0.0000e+00
+          Child 0:
+            Fork [samples=1 nodes=4. fails=3. sols=0. completed=false materialized=2 pruned=0] density=0.0000e+00
+              Child 0:
+                Fork [samples=1 nodes=1. fails=1. sols=0. completed=true materialized=1 pruned=0] **PRUNED**
+              Child 1: not materialized
+              Child 2: not materialized
+          Child 1: not materialized
+          Child 2: not materialized
+      Child 1:
+        Fork [samples=3 nodes=13. fails=0. sols=9. completed=false materialized=5 pruned=3] density=1.0000e+00
+          Child 0: not materialized
+          Child 1:
+            Fork [samples=3 nodes=4. fails=0. sols=3. completed=true materialized=4 pruned=3] **PRUNED**
+          Child 2: not materialized
+      Child 2:
+        Fork [samples=7 nodes=40. fails=0. sols=27. completed=false materialized=15 pruned=3] density=1.0000e+00
+          Child 0:
+            Fork [samples=4 nodes=13. fails=0. sols=9. completed=false materialized=7 pruned=3] density=1.0000e+00
+              Child 0: not materialized
+              Child 1:
+                Fork [samples=3 nodes=4. fails=0. sols=3. completed=true materialized=4 pruned=3] **PRUNED**
+              Child 2:
+                Fork [samples=1 nodes=4. fails=0. sols=3. completed=false materialized=2 pruned=0] density=1.0000e+00
+                  Child 0: not materialized
+                  Child 1: not materialized
+                  Child 2:
+                    Fork [samples=1 nodes=1. fails=0. sols=1. completed=true materialized=1 pruned=0] **PRUNED**
+          Child 1:
+            Fork [samples=1 nodes=13. fails=0. sols=9. completed=false materialized=3 pruned=0] density=1.0000e+00
+              Child 0: not materialized
+              Child 1:
+                Fork [samples=1 nodes=4. fails=0. sols=3. completed=false materialized=2 pruned=0] density=1.0000e+00
+                  Child 0: not materialized
+                  Child 1:
+                    Fork [samples=1 nodes=1. fails=0. sols=1. completed=true materialized=1 pruned=0] **PRUNED**
+                  Child 2: not materialized
+              Child 2: not materialized
+          Child 2:
+            Fork [samples=2 nodes=13. fails=0. sols=9. completed=false materialized=4 pruned=0] density=1.0000e+00
+              Child 0:
+                Fork [samples=2 nodes=4. fails=0. sols=3. completed=false materialized=3 pruned=0] density=1.0000e+00
+                  Child 0:
+                    Fork [samples=1 nodes=1. fails=0. sols=1. completed=true materialized=1 pruned=0] **PRUNED**
+                  Child 1: not materialized
+                  Child 2:
+                    Fork [samples=1 nodes=1. fails=0. sols=1. completed=true materialized=1 pruned=0] **PRUNED**
+              Child 1: not materialized
+              Child 2: not materialized
+
+    === After 5 samples ===
+    Fork [samples=15 nodes=67. fails=9. sols=36. completed=false materialized=30 pruned=9] density=8.0000e-01
+      Child 0:
+        Fork [samples=1 nodes=13. fails=9. sols=0. completed=false materialized=3 pruned=0] density=0.0000e+00
+          Child 0:
+            Fork [samples=1 nodes=4. fails=3. sols=0. completed=false materialized=2 pruned=0] density=0.0000e+00
+              Child 0:
+                Fork [samples=1 nodes=1. fails=1. sols=0. completed=true materialized=1 pruned=0] **PRUNED**
+              Child 1: not materialized
+              Child 2: not materialized
+          Child 1: not materialized
+          Child 2: not materialized
+      Child 1:
+        Fork [samples=7 nodes=13. fails=0. sols=9. completed=false materialized=11 pruned=6] density=1.0000e+00
+          Child 0:
+            Fork [samples=1 nodes=4. fails=0. sols=3. completed=false materialized=2 pruned=0] density=1.0000e+00
+              Child 0:
+                Fork [samples=1 nodes=1. fails=0. sols=1. completed=true materialized=1 pruned=0] **PRUNED**
+              Child 1: not materialized
+              Child 2: not materialized
+          Child 1:
+            Fork [samples=3 nodes=4. fails=0. sols=3. completed=true materialized=4 pruned=3] **PRUNED**
+          Child 2:
+            Fork [samples=3 nodes=4. fails=0. sols=3. completed=true materialized=4 pruned=3] **PRUNED**
+      Child 2:
+        Fork [samples=7 nodes=40. fails=0. sols=27. completed=false materialized=15 pruned=3] density=1.0000e+00
+          Child 0:
+            Fork [samples=4 nodes=13. fails=0. sols=9. completed=false materialized=7 pruned=3] density=1.0000e+00
+              Child 0: not materialized
+              Child 1:
+                Fork [samples=3 nodes=4. fails=0. sols=3. completed=true materialized=4 pruned=3] **PRUNED**
+              Child 2:
+                Fork [samples=1 nodes=4. fails=0. sols=3. completed=false materialized=2 pruned=0] density=1.0000e+00
+                  Child 0: not materialized
+                  Child 1: not materialized
+                  Child 2:
+                    Fork [samples=1 nodes=1. fails=0. sols=1. completed=true materialized=1 pruned=0] **PRUNED**
+          Child 1:
+            Fork [samples=1 nodes=13. fails=0. sols=9. completed=false materialized=3 pruned=0] density=1.0000e+00
+              Child 0: not materialized
+              Child 1:
+                Fork [samples=1 nodes=4. fails=0. sols=3. completed=false materialized=2 pruned=0] density=1.0000e+00
+                  Child 0: not materialized
+                  Child 1:
+                    Fork [samples=1 nodes=1. fails=0. sols=1. completed=true materialized=1 pruned=0] **PRUNED**
+                  Child 2: not materialized
+              Child 2: not materialized
+          Child 2:
+            Fork [samples=2 nodes=13. fails=0. sols=9. completed=false materialized=4 pruned=0] density=1.0000e+00
+              Child 0:
+                Fork [samples=2 nodes=4. fails=0. sols=3. completed=false materialized=3 pruned=0] density=1.0000e+00
+                  Child 0:
+                    Fork [samples=1 nodes=1. fails=0. sols=1. completed=true materialized=1 pruned=0] **PRUNED**
+                  Child 1: not materialized
+                  Child 2:
+                    Fork [samples=1 nodes=1. fails=0. sols=1. completed=true materialized=1 pruned=0] **PRUNED**
+              Child 1: not materialized
+              Child 2: not materialized
     |}]
 end
 

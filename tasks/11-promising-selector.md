@@ -143,7 +143,12 @@ Pure refactoring — no behavior change. Make the braking selectors accept a `gr
 - [x] Update all call sites (tests + solver code) to pass `~greedy_selector:greedy_completion_selector`
 - [x] Build passes, all tests pass with identical output
 
-### Phase 1: `greedy_solution` Selector Tests
+### Phase 1: `greedy_solution` Selector Tests ✅ Completed
+
+- [x] Implemented `greedy_solution_selector` with density-based scoring
+- [x] Added `print_tree` helper showing fails, sols, and density for inspection
+- [x] Created step-by-step inspection test with diverging search space (Child 0: low density, Child 1: high density)
+- [x] Test promotes output showing selector behavior
 
 ```ocaml
 let%expect_test "greedy_solution picks highest density" = begin

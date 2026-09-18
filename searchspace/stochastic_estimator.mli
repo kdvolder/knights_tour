@@ -37,6 +37,9 @@ val greedy_completion_selector : 'a child_selector
 (** Picks the child with the least remaining unmaterialized work.
     Drives branches to completion faster, enabling pruning and memory reclamation. *)
 
+val greedy_solution_selector : 'a child_selector
+(** Picks the child with the highest solution density *)
+
 val hard_braking_memory_aware_selector : threshold:float -> memory_pressure:('a t -> float) -> greedy_selector:'a child_selector -> 'a child_selector
 (** Memory-aware selector that switches between undersampled and a provided greedy mode.
     When pressure is below threshold, uses [undersampled_selector] to spread
