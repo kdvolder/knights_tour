@@ -19,6 +19,7 @@ let parse_args () =
   end;
   
   let no_resume = ref false in
+  let no_save = ref false in
   let min_save_interval = ref 300.0 in   (* default: 5 minutes *)
   let batch_size = ref 1000 in
   
@@ -27,7 +28,7 @@ let parse_args () =
   in
   
   let speclist = Arg.[
-    "--no-resume", Unit (fun () -> no_resume := true), " Always start fresh, ignore saved state";
+    "--no-resume", Unit (fun () -> no_resume := true; no_save := true), " Always start fresh, ignore saved state (and don't save new state)";
     "--save-interval", Float (fun f -> min_save_interval := f), " Minimum auto-save interval in seconds (default: 300)";
     "--batch-size", Int (fun i -> batch_size := i), " Samples per batch (default: 1000)";
   ] in
@@ -41,7 +42,7 @@ let parse_args () =
     exit 1
   end;
   
-  (!puzzle_file, !no_resume, !min_save_interval, !batch_size)
+  (!puzzle_file, !no_resume, !no_save, !min_save_interval, !batch_size)
 
 (* ============================================================================ *)
 (* File Path Utilities (relative to puzzle file directory)                     *)
@@ -172,7 +173,7 @@ let format_log_line r =
 
 let () =
   (* Parse CLI arguments *)
-  let puzzle_file, no_resume, min_save_interval, batch_size = parse_args () in
+  let puzzle_file, no_resume, no_save, min_save_interval, batch_size = parse_args () in
   
   (* Create multi-resolution log pipeline (next to puzzle file) *)
   let log_dir = Filename.dirname puzzle_file in
@@ -239,7 +240,7 @@ let () =
   (* Run estimation with auto-save and CTRL-C handling *)
   Stochastic_progress.run_with_progress ~batch_size ~on_progress:(fun p ->
     (* Auto-save check (only between batches) *)
-    ignore (try_autosave auto_save_state estimator puzzle_file p.elapsed_seconds);
+    if not no_save then ignore (try_autosave auto_save_state estimator puzzle_file p.elapsed_seconds);
     
     (* Progress table update *)
     let est = Stochastic_estimator.estimates estimator in
@@ -276,10 +277,11 @@ let () =
   
   (* Final save on completion or shutdown *)
   let final_elapsed = Unix.gettimeofday () -. start_time in
-  let saved = try_autosave ~force:!shutting_down auto_save_state estimator puzzle_file final_elapsed in
+  let saved = if not no_save then try_autosave ~force:!shutting_down auto_save_state estimator puzzle_file final_elapsed else false in
   
   if !shutting_down then (
     if saved then Printf.printf "[Auto-save complete] State saved. Exiting.\n%!"
+    else if no_save then Printf.printf "[Shutdown] No autosave (--no-resume mode). Exiting.\n%!"
     else Printf.printf "[Shutdown] No autosave (interval not reached). Exiting.\n%!";
     Multi_log.close pipeline;
     close_out out_ch;
