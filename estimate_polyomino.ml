@@ -220,7 +220,7 @@ let () =
   in
   
   (* Create estimator with selector and callback *)
-  let (selector, get_stats) = Stochastic_estimator.gradual_braking_memory_aware_selector ~threshold:100_000. ~memory_pressure:nodes_in_memory ~greedy_selector:Stochastic_estimator.greedy_potential_selector in
+  let (selector, get_stats) = Stochastic_estimator.gradual_braking_memory_aware_selector ~threshold:100_000. ~memory_pressure:nodes_in_memory ~greedy_selector:(Stochastic_estimator.mixed_selector ~ratio:0.5 Stochastic_estimator.greedy_solution_selector Stochastic_estimator.greedy_completion_selector) in
   
   let estimator =
     if was_resumed then (

@@ -44,6 +44,10 @@ val greedy_potential_selector : 'a child_selector
 (** Picks the child with the largest estimated node count (absolute, not remaining work).
     Drives exploration toward the biggest search spaces — where solutions are most likely. *)
 
+val mixed_selector : ratio:float -> 'a child_selector -> 'a child_selector -> 'a child_selector
+(** Hybrid selector that randomly picks between two selectors.
+    With probability [ratio], uses the first selector; otherwise, the second. *)
+
 val hard_braking_memory_aware_selector : threshold:float -> memory_pressure:('a t -> float) -> greedy_selector:'a child_selector -> 'a child_selector
 (** Memory-aware selector that switches between undersampled and a provided greedy mode.
     When pressure is below threshold, uses [undersampled_selector] to spread

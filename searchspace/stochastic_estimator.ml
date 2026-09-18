@@ -358,6 +358,15 @@ let greedy_solution_selector _ (node : 'a node) : int =
     let candidates = List.filter (fun i -> rates.(i) = max_rate) (List.init n Fun.id) in
     List.nth candidates (Random.int (List.length candidates))
 
+(** Hybrid selector that randomly picks between greedy_solution and greedy_completion.
+    With probability [solution_ratio], uses greedy_solution (density-based).
+    Otherwise, uses greedy_completion (smallest remaining work). *)
+let mixed_selector ~ratio (selector_a : 'a child_selector) (selector_b : 'a child_selector) (est : 'a t) (node : 'a node) : int =
+  if Random.float 1.0 < ratio then
+    selector_a est node
+  else
+    selector_b est node
+
 let rec walk select_child on_solution (node : 'a node) : unit =
 	match Lazy.force node.node_view with
 	| Fail -> ()
