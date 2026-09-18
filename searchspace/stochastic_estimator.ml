@@ -1647,6 +1647,59 @@ let%expect_test "hard_braking_memory_aware_selector: scenario - switches between
     |}]
 end
 
+let%expect_test "greedy_potential: completed vs unexplored preference" = begin
+  (* Simple test: two consecutive greedy samples on a tree where one branch completes.
+     After sample 1, some nodes are completed. On sample 2, the selector should 
+     prefer unexplored children over completed ones when walking back through root. *)
+  let num = of_list [1;2;3] in
+  let tree =
+    alt [
+      (num |=> (fun x -> return ("a" ^ string_of_int x))); (* Small branch, easy to complete *)
+      (num |=> (fun x -> num |=> (fun y -> return ("b" ^ string_of_int x ^ string_of_int y)))); (* Larger branch *)
+    ]
+  in
+  let est = create ~selector:greedy_potential_selector tree in
+  Random.full_init [|42|];
+  
+  Printf.printf "=== Initial state ===\n";
+  print_tree "" est.root;
+  
+  Printf.printf "\n=== After sample 1 (greedy picks one branch, completes nodes) ===\n";
+  ignore (sample 1 est);
+  print_tree "" est.root;
+  
+  Printf.printf "\n=== After sample 2 (greedy retraces, avoids completed, picks unexplored) ===\n";
+  ignore (sample 1 est);
+  print_tree "" est.root;
+  [%expect{|
+    === Initial state ===
+    Fork [samples=0 nodes=1. fails=0. sols=0. completed=false materialized=1 pruned=0]
+      Child 0: not materialized
+      Child 1: not materialized
+
+    === After sample 1 (greedy picks one branch, completes nodes) ===
+    Fork [samples=1 nodes=9. fails=0. sols=6. completed=false materialized=3 pruned=0] density=1.0000e+00
+      Child 0:
+        Fork [samples=1 nodes=4. fails=0. sols=3. completed=false materialized=2 pruned=0] density=1.0000e+00
+          Child 0: not materialized
+          Child 1:
+            Fork [samples=1 nodes=1. fails=0. sols=1. completed=true materialized=1 pruned=0] **PRUNED**
+          Child 2: not materialized
+      Child 1: not materialized
+
+    === After sample 2 (greedy retraces, avoids completed, picks unexplored) ===
+    Fork [samples=2 nodes=9. fails=0. sols=6. completed=false materialized=4 pruned=0] density=1.0000e+00
+      Child 0:
+        Fork [samples=2 nodes=4. fails=0. sols=3. completed=false materialized=3 pruned=0] density=1.0000e+00
+          Child 0:
+            Fork [samples=1 nodes=1. fails=0. sols=1. completed=true materialized=1 pruned=0] **PRUNED**
+          Child 1:
+            Fork [samples=1 nodes=1. fails=0. sols=1. completed=true materialized=1 pruned=0] **PRUNED**
+          Child 2: not materialized
+      Child 1: not materialized
+    |}]
+end
+
 let%expect_test "greedy_potential: step-by-step inspection" = begin
   (* Create a search space where greedy_potential_selector makes size-based choices:
      - Child 0: small subtree (few nodes)
