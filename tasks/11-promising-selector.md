@@ -5,19 +5,21 @@
 
 ## Goal
 
-Replace the `greedy_completion_selector` (which picks children with least remaining work) with a new selector that picks the child with the highest **solution density** — i.e., `solution_estimate / (fail_estimate + solution_estimate)`.
+Add a new `greedy_solution` selector (which picks children with highest solution density) alongside the existing `greedy_completion_selector`. The new selector picks the child with the highest **solution density** — i.e., `solution_estimate / (fail_estimate + solution_estimate)`.
 
 This fixes the root cause of solver stagnation: "least remaining work" is biased toward dead ends (small branches terminate early because pieces were placed in constrained/impossible ways). The new selector drives exploration toward regions where solutions actually live.
 
 ## Background
 
-The current greedy completion selector picks the child with `nodes_estimate - materialized_nodes` being smallest. This was intended to "finish branches faster for pruning," but it has an unintended bias:
+The `greedy_completion_selector` picks the child with `nodes_estimate - materialized_nodes` being smallest. This was intended to "finish branches faster for pruning," but it has an unintended bias:
 
 - A branch is small because pieces were placed in ways that constrain future moves
 - Constrained placements → early termination → dead ends
 - "Least remaining work" = "most likely to be a dead end"
 
 The solver has been running for ~35 days, finding 2180 solutions and then stagnating. Estimates froze because the greedy selector keeps re-exploring the same dead-end regions without discovering new ones.
+
+The `greedy_solution` selector addresses this by optimizing for solution density instead of remaining work.
 
 ### The New Metric: Solution Density
 
@@ -49,13 +51,45 @@ This is a multi-armed bandit strategy:
 
 No external "exploration bonus" needed — the density signal handles diversification automatically.
 
-## Acceptance Criteria
+## API Design
 
-### 11.1 Selector Function
+The braking selectors are parameterized with a `greedy_selector` argument instead of having it hardcoded. This makes the braking mechanism generic and reusable.
+
+### New selector
+```ocaml
+val greedy_solution : 'a child_selector
+(** Picks the child with highest solution density: `solution_estimate / (fail_estimate + solution_estimate)`.
+    Greedy for solutions rather than greedy for completion. *)
+```
+
+### Updated braking selectors (parameterized)
+```ocaml
+val hard_braking_memory_aware_selector :
+  threshold:float -> memory_pressure:('a t -> float) ->
+  greedy_selector:'a child_selector -> 'a child_selector
+(** Switches between undersampled and the provided greedy selector based on threshold. *)
+
+val gradual_braking_memory_aware_selector :
+  threshold:float -> memory_pressure:('a t -> float) ->
+  greedy_selector:'a child_selector -> ('a child_selector * (unit -> gradual_braking_stats))
+(** Probabilistically blends undersampled and the provided greedy selector. *)
+```
+
+### Usage example
+```ocaml
+gradual_braking_memory_aware_selector
+  ~threshold:8000.0
+  ~memory_pressure:(fun est -> Float.of_int (est.root.materialized_nodes - est.root.pruned_nodes))
+  ~greedy_selector:greedy_solution
+```
+
+### Acceptance Criteria
+
+### 11.1 Selector Function (`greedy_solution`)
 
 1. **Same signature as existing selectors**:
-   - `promising_selector : 'a node -> int`
-   - Can be passed directly to `create ~selector:promising_selector tree`
+   - `greedy_solution : 'a t -> 'a node -> int`
+   - Can be passed directly to `create ~selector:greedy_solution tree`
 
 2. **Score calculation**:
    - Completed children → score -2.0 (never picked unless all are completed)
@@ -70,74 +104,107 @@ No external "exploration bonus" needed — the density signal handles diversific
 
 ### 11.2 Integration with Gradual Braking
 
-5. **Replace greedy in gradual braking**:
-   - `gradual_braking_memory_aware_selector` should use the new promising selector instead of `greedy_completion_selector`
-   - Keep the gradual braking mechanism (sliding threshold) as-is — it still provides undersampled fallback
+5. **Braking selectors accept `greedy_selector` parameter**:
+   - Both `hard_braking_memory_aware_selector` and `gradual_braking_memory_aware_selector` take a `greedy_selector:'a child_selector` argument
+   - The greedy selector is no longer hardcoded — callers choose which one to use
+
+6. **Default usage in solver code**:
+   - Wherever `gradual_braking_memory_aware_selector` is called, pass `~greedy_selector:greedy_solution`
+   - Wherever `hard_braking_memory_aware_selector` is called, pass `~greedy_selector:greedy_solution`
 
 ### 11.3 Testing
 
-6. **Tests verify density-based selection**:
+8. **Tests verify density-based selection**:
    - Given children with different densities, picks the highest
    - Unexplored children (-1.0) are preferred over completed children (-2.0)
    - Explored children with any positive density beat unexplored children (-1.0)
 
-7. **Tests verify fallback behavior**:
+9. **Tests verify fallback behavior**:
    - When all children are completed, picks randomly
    - When all children are unexplored, picks randomly
 
+10. **Tests verify parameterized braking**:
+   - `gradual_braking_memory_aware_selector ~greedy_selector:greedy_solution` uses greedy_solution in high-pressure mode
+   - `gradual_braking_memory_aware_selector ~greedy_selector:greedy_completion` uses greedy_completion in high-pressure mode
+   - Stats still track `undersampled_count` and `greedy_count` (the label doesn't change, only the behavior)
+
+11. **Tests verify backward compat**:
+   - `greedy_completion_selector` still exists and works (for anyone using it directly)
+   - Existing tests that use `greedy_completion_selector` still pass
+
 ## Implementation Process (TDD)
 
-### Phase 1: Promising Selector Tests
+### Phase 0: Parameterize Braking API ✅ Completed
+
+Pure refactoring — no behavior change. Make the braking selectors accept a `greedy_selector` parameter instead of having it hardcoded.
+
+- [x] Update `.mli`: add `greedy_selector:'a child_selector` parameter to both braking selectors
+- [x] Update `.ml`: pass `greedy_selector` through instead of calling `greedy_completion_selector` directly
+- [x] Update all call sites (tests + solver code) to pass `~greedy_selector:greedy_completion_selector`
+- [x] Build passes, all tests pass with identical output
+
+### Phase 1: `greedy_solution` Selector Tests
 
 ```ocaml
-let%expect_test "promising_selector picks highest density" = begin
+let%expect_test "greedy_solution picks highest density" = begin
   (* Create tree, sample enough to get different densities in children *)
-  (* Apply promising selector — should pick child with highest solution_estimate / (fail + sol) *)
+  (* Apply greedy_solution — should pick child with highest solution_estimate / (fail + sol) *)
 end
 
-let%expect_test "promising_selector prefers explored over completed" = begin
+let%expect_test "greedy_solution prefers explored over completed" = begin
   (* Create tree, complete one child, leave another unexplored *)
-  (* Apply promising selector — should pick the unexplored child (score -1) over completed (-2) *)
+  (* Apply greedy_solution — should pick the unexplored child (score -1) over completed (-2) *)
 end
 
-let%expect_test "promising_selector prefers explored with density over unexplored" = begin
+let%expect_test "greedy_solution prefers explored with density over unexplored" = begin
   (* Create tree, one child has samples and positive density, another is None *)
-  (* Apply promising selector — should pick the explored child (density > -1) over None (-1) *)
+  (* Apply greedy_solution — should pick the explored child (density > -1) over None (-1) *)
 end
 
-let%expect_test "promising_selector falls back to random when all completed" = begin
+let%expect_test "greedy_solution falls back to random when all completed" = begin
   (* Create tree, complete all children *)
-  (* Apply promising selector — should pick randomly among completed children *)
+  (* Apply greedy_solution — should pick randomly among completed children *)
 end
 
-let%expect_test "promising_selector falls back to random when all unexplored" = begin
+let%expect_test "greedy_solution falls back to random when all unexplored" = begin
   (* Create tree, no children materialized *)
-  (* Apply promising selector — should pick randomly among None children *)
+  (* Apply greedy_solution — should pick randomly among None children *)
 end
 ```
 
-### Phase 2: Integration Tests
+### Phase 2: Parameterized Braking Tests
 
 ```ocaml
-let%expect_test "promising selector finds more solutions than greedy" = begin
-  (* Compare promising_selector vs greedy_completion_selector on same tree *)
-  (* Verify promising selector finds more solutions in same number of samples *)
+let%expect_test "gradual_braking uses provided greedy_selector" = begin
+  (* Create two gradual braking selectors with different greedy selectors *)
+  (* sel_a: undersampled + greedy_solution
+     sel_b: undersampled + greedy_completion *)
+  (* Verify each uses the correct selector in high-pressure mode *)
 end
 
-let%expect_test "promising selector works with gradual braking" = begin
-  (* Use promising_selector in gradual_braking_memory_aware_selector *)
-  (* Verify selector switches between undersampled and promising correctly *)
+let%expect_test "hard_braking uses provided greedy_selector" = begin
+  (* Same pattern — verify hard_braking switches to the correct selector *)
+end
+```
+
+### Phase 3: Integration Tests
+
+```ocaml
+let%expect_test "greedy_solution finds more solutions than greedy_completion" = begin
+  (* Compare greedy_solution vs greedy_completion on same tree *)
+  (* Verify greedy_solution finds more solutions in same number of samples *)
 end
 ```
 
 ## Files to Modify
 
-- `searchspace/stochastic_estimator.ml` - implement `promising_selector`, update gradual braking
-- `searchspace/stochastic_estimator.mli` - export `promising_selector`
+- `searchspace/stochastic_estimator.ml` - implement `greedy_solution`, parameterize braking selectors
+- `searchspace/stochastic_estimator.mli` - export `greedy_solution`, update braking selector signatures
 
 ## Dependencies
 
-- **Task 7 (Greedy Completion Selector)**: This task replaces the greedy selector's logic. The gradual braking mechanism from Task 10 remains unchanged.
+- **Task 7 (Greedy Completion Selector)**: `greedy_completion_selector` stays as-is. This task adds a new selector alongside it.
+- **Task 10 (Gradual Braking)**: The gradual braking mechanism stays the same — it just becomes parameterized with a `greedy_selector` argument instead of having one hardcoded.
 - **Task 6 (Pruning)**: Pruning still needed — completed branches get pruned, keeping memory bounded.
 
 ## Notes

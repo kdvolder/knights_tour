@@ -37,17 +37,18 @@ val greedy_completion_selector : 'a child_selector
 (** Picks the child with the least remaining unmaterialized work.
     Drives branches to completion faster, enabling pruning and memory reclamation. *)
 
-val hard_braking_memory_aware_selector : threshold:float -> memory_pressure:('a t -> float) -> 'a child_selector
-(** Memory-aware selector that switches between undersampled and greedy modes.
+val hard_braking_memory_aware_selector : threshold:float -> memory_pressure:('a t -> float) -> greedy_selector:'a child_selector -> 'a child_selector
+(** Memory-aware selector that switches between undersampled and a provided greedy mode.
     When pressure is below threshold, uses [undersampled_selector] to spread
-    samples across branches. When pressure exceeds threshold, switches to
-    [greedy_completion_selector] to focus on completing branches, enabling pruning.
+    samples across branches. When pressure exceeds threshold, switches to the provided
+    greedy selector to focus on completing branches, enabling pruning.
     
     The selector is unit-agnostic: [memory_pressure] returns any numeric value representing
     pressure, and [threshold] must be in the same units. Higher pressure values trigger greedy.
     
     @param threshold Pressure value at which to switch to greedy mode.
     @param memory_pressure Function that receives the estimator and returns current pressure value.
+    @param greedy_selector Selector to use when pressure exceeds threshold (e.g. [greedy_completion_selector]).
     @return Selector function (estimator -> node -> int) *)
 
 type gradual_braking_stats = {
@@ -60,7 +61,7 @@ type gradual_braking_stats = {
 }
 (** Statistics tracking which strategy the gradual braking selector used. *)
 
-val gradual_braking_memory_aware_selector : threshold:float -> memory_pressure:('a t -> float) -> ('a child_selector * (unit -> gradual_braking_stats))
+val gradual_braking_memory_aware_selector : threshold:float -> memory_pressure:('a t -> float) -> greedy_selector:'a child_selector -> ('a child_selector * (unit -> gradual_braking_stats))
 (** Gradual braking selector that eases off undersampled behavior as a measured value approaches a threshold.
     Uses the formula U + (C mod T) < T to provide linear decay blending from 100% undersampled
     at U=0 to 0% undersampled at U=T. Prevents the "freight train" overshoot problem by starting
@@ -75,6 +76,7 @@ val gradual_braking_memory_aware_selector : threshold:float -> memory_pressure:(
     
     @param threshold Pressure value at which undersampled probability reaches 0%.
     @param memory_pressure Function that receives the estimator and returns current pressure value.
+    @param greedy_selector Selector to use when pressure exceeds threshold (e.g. [greedy_completion_selector]).
     @return Function from estimator to (selector function, stats accessor) *)
 
 type estimates = {

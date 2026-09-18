@@ -1121,8 +1121,8 @@ end
     @param threshold Memory usage threshold. Above this, switches to greedy.
     @param memfree Function that returns the fraction of free memory.
     @return Selector function (estimator -> node -> int) *)
-let hard_braking_memory_aware_selector ~threshold ~memory_pressure est (node : 'a node) : int =
-  if memory_pressure est > threshold then greedy_completion_selector est node
+let hard_braking_memory_aware_selector ~threshold ~memory_pressure ~greedy_selector est (node : 'a node) : int =
+  if memory_pressure est > threshold then greedy_selector est node
   else undersampled_selector est node
 
 let%expect_test "hard_braking_memory_aware_selector: scenario - switches between undersampled and greedy" = begin
@@ -1141,7 +1141,7 @@ let%expect_test "hard_braking_memory_aware_selector: scenario - switches between
   let mock_memory_pressure est = Float.of_int (est.root.materialized_nodes - est.root.pruned_nodes) in
   
   (* Create estimator with hard_braking_memory_aware_selector, threshold at 5 net nodes *)
-  let selector = hard_braking_memory_aware_selector ~threshold:5.0 ~memory_pressure:mock_memory_pressure in
+  let selector = hard_braking_memory_aware_selector ~threshold:5.0 ~memory_pressure:mock_memory_pressure ~greedy_selector:greedy_completion_selector in
   let est = create ~selector tree in
   
   (* Helper to print current mode *)
@@ -1255,7 +1255,7 @@ type gradual_braking_stats = {
     @param threshold Pressure value at which undersampled probability reaches 0% (default 8000.0).
     @param memory_pressure Function that receives the estimator and returns current pressure value.
     @return Tuple of (selector function, stats accessor) *)
-let gradual_braking_memory_aware_selector ~threshold ~memory_pressure
+let gradual_braking_memory_aware_selector ~threshold ~memory_pressure ~greedy_selector
   : ('a child_selector * (unit -> gradual_braking_stats)) =
   let total_calls = ref 0 in
   let undersampled_count = ref 0 in
@@ -1275,7 +1275,7 @@ let gradual_braking_memory_aware_selector ~threshold ~memory_pressure
       undersampled_selector est node
     ) else (
       incr greedy_count;
-      greedy_completion_selector est node
+      greedy_selector est node
     )
   in
   let get_stats () : gradual_braking_stats = 
@@ -1311,7 +1311,8 @@ let%expect_test "selector: linear decay across U/T ratios" = begin
     let tree = large_tree () in
     let (selector, get_stats) = gradual_braking_memory_aware_selector 
       ~threshold:t
-      ~memory_pressure:(fun _ -> u) in
+      ~memory_pressure:(fun _ -> u)
+      ~greedy_selector:greedy_completion_selector in
     let est = create ~selector tree in
     ignore (sample 100 est);
     let s = get_stats () in
@@ -1337,10 +1338,12 @@ let%expect_test "selector: stats are independent per selector" = begin
   let tree_b = large_tree () in
   let sel_a, get_stats_a = gradual_braking_memory_aware_selector 
     ~threshold:t
-    ~memory_pressure:(fun _ -> 0.0) in
+    ~memory_pressure:(fun _ -> 0.0)
+    ~greedy_selector:greedy_completion_selector in
   let sel_b, get_stats_b = gradual_braking_memory_aware_selector 
     ~threshold:t
-    ~memory_pressure:(fun _ -> t) in
+    ~memory_pressure:(fun _ -> t)
+    ~greedy_selector:greedy_completion_selector in
   let est_a = create ~selector:sel_a tree_a in
   let est_b = create ~selector:sel_b tree_b in
   ignore (sample 20 est_a);
