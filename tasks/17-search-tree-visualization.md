@@ -10,42 +10,37 @@ Visualize the oracle2 search tree as a fractal-like radial layout where:
 
 ## Three separate problems
 
-### 1. Data extraction
+### 1 & 2. Data extraction + Layout (single OCaml program)
 - Write an OCaml script that loads the saved state using our existing `load_state` function from `stochastic_estimator.ml`
-- Walk the reconstructed tree and output node data in a visualization-friendly format (JSON/CSV)
-- Output includes: nodes, edges (parent → child), and properties (node type, solution_estimate, depth, etc.)
-- No spatial info yet — just the graph structure
+- The tree is now in memory — no intermediate file needed between extraction and layout
+- Walk the tree, compute radial layout positions (proportional arc subdivision + adaptive spacing), and output a **flat array of nodes** with `(x, y, color, parent_index)` directly to `tree-data.json` for Deck.gl
+- No intermediate JSON — load, process, output in one program
 - Reuse our existing serialization/parsing code instead of writing a separate parser
 
-### 2. Layout algorithm
-- **Proportional arc subdivision**: each subtree gets angle proportional to its *max width* (number of nodes at the widest level within the subtree) via `d3.tree().node.sum(weight)`
-  - Max width directly measures how many nodes need to be displayed side-by-side
-  - Wide, shallow branches get wide slices; deep, narrow branches get thin slices
-  - Alternative: number of leaves as a simpler proxy for max width
-- **Node-local adaptive radial spacing** (no global concentric circles):
-  - Each subtree is its own independent radial tree with spacing based on *its* local branching
-  - Recurrence: `R_{d+1} = R_d × (1 + 2π/N_d)` where `N_d` is the number of siblings at this node
-  - Large subtrees spread out more, small ones pack tighter — each scales independently
-  - No special case for first few layers — formula applied uniformly at every level
-- This is fractal-ish because each subtree is self-contained and scales on its own terms
-- **D3.js d3-hierarchy** for proportional arc allocation, then apply adaptive radius formula
-- Alternative: implement from first principles if needed
-
-### 3. Rendering
-- GPU-accelerated rendering for 500K+ nodes
-- **Smart aggregation**: when 1000 dots cluster into a single pixel, draw one pixel (not 1000 overlapping ones)
-- Zoom/pan support — smooth interaction at all scales
-- **Cosmos.gl** (WebGL, handles 100K+ nodes) or custom Three.js/Pixi.js renderer
+### 3. Rendering (Deck.gl)
+- **Deck.gl** — Uber's WebGL visualization framework
+  - Handles GPU-accelerated rendering for 500K+ nodes automatically
+  - Built-in **smart aggregation**: when dots cluster into a single pixel, blends colors (no custom shader needed)
+  - Built-in **zoom/pan**: `controller: true` gives smooth interaction out of the box
+  - Minimal JS code (~50-100 lines) — just load data and configure layers
+- **Two layers**:
+  - `ScatterplotLayer` for nodes (colored dots)
+  - `PathLayer` or custom layer for edges (line segments from parent to child)
 - Color dots by node type (Result=green, Fail=red, Fork=blue, Completed=gray)
+- **Data format**: OCaml outputs `tree-data.json` (flat arrays), Deck.gl loads it via URL
+  - HTML file is tiny (~KB) — data lives in separate JSON file (tens of MB)
+  - Deck.gl fetches and parses the JSON, converts to GPU buffers automatically
+- **Live updates**: OCaml can overwrite `tree-data.json` periodically, browser refreshes to see progress
 
 ## Implementation approach
-1. Write an OCaml script that loads the saved state using `load_state` from our existing code, walks the tree, and outputs visualization data (nodes, edges, properties)
-2. Use D3.js d3-hierarchy to compute proportional arc allocation (`d3.tree().node.sum(weight)`)
-3. Apply node-local adaptive radial spacing: `R_{d+1} = R_d × (1 + 2π/N_d)` at every level, no special cases
-4. Export layout data (x, y coordinates + colors) as JSON/CSV
-5. Render with WebGL library supporting zoom/pan and smart aggregation
+1. **OCaml program**: Write script that loads saved state via `load_state`, walks tree, computes radial layout (proportional arc subdivision + adaptive spacing), outputs flat array (`tree-data.json`) with `(x, y, color, parent_index)`
+2. **Deck.gl rendering**: Minimal HTML/JS that loads `tree-data.json` and renders with `ScatterplotLayer` (nodes) + edge layer
+3. **Iterate**: Start with static file, add live-update capability if desired
 
 ## Notes
-- The layout computation (step 2) is fast — D3 handles it fine even for large trees
-- The rendering (step 3) is where GPU acceleration matters — CPU-bound tools like D3.js with SVG will choke
-- Smart aggregation is key: at zoomed out, clusters of 1000 nodes should render as a single colored pixel, not 1000 overlapping dots
+- **OCaml does steps 1 & 2** (data extraction + layout in one program), Deck.gl handles step 3 (rendering)
+- No intermediate file between extraction and layout — tree is in memory, processed directly
+- Layout computation in OCaml is fast — no need for D3.js
+- Deck.gl handles GPU acceleration, smart aggregation, and zoom/pan automatically — minimal JS code needed
+- Data format is flat arrays (not nested JSON) for efficiency with 500K+ nodes
+- Edges are implicit via parent pointers — renderer draws lines from each node to its parent
